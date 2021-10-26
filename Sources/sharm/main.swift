@@ -58,6 +58,7 @@ typealias Dict = OrderedDictionary<Value, Value>
 
 indirect enum Value: Hashable {
 
+    case noneVal
     case atom(String)
     case bool(Bool)
     case int(Int)
@@ -65,7 +66,6 @@ indirect enum Value: Hashable {
     case address(Value)
     case pc(Int)
     case set(Set<Value>)
-    case args([Value])
 
 }
 
@@ -127,6 +127,7 @@ extension Value: CustomStringConvertible {
 
     var description: String {
         switch self {
+        case .noneVal: return "None"
         case .atom(let value): return ".\(value)"
         case .bool(let value): return value ? "True" : "False"
         case .int(let value): return "\(value)"
@@ -134,7 +135,6 @@ extension Value: CustomStringConvertible {
         case .address(let value): return "?\(value)"
         case .pc(let value): return "PC(\(value))"
         case .set(let value): return "{\(value.map { "\($0)" }.joined(separator: ", "))}"
-        case .args(let value): return "Args(\(value.map { "\($0)" }.joined(separator: ", ")))"
         }
     }
 
@@ -142,12 +142,24 @@ extension Value: CustomStringConvertible {
 
 struct Context: Hashable {
 
-    var stack: [Value] = []
+    var stack: [Value] = [.dict(Dict())]
     var pc: Int = 0
-    var fp: Int = 0
+    var fp: Int = 0 // unused?
     var vars: Dict = Dict()
     var atomicLevel: Int = 0
     var readonlyLevel: Int = 0
+    var terminated: Bool = false
+
+}
+
+extension Context: CustomStringConvertible {
+
+    var description: String {
+        return "Context(pc=\(pc),fp=\(fp),at=\(atomicLevel),rd=\(readonlyLevel),tm=\(terminated)\n"
+            + "\tvars=\(vars)\n"
+            + "\tstack=\(stack)\n"
+            + ")"
+    }
 
 }
 
@@ -305,20 +317,108 @@ extension Op: Decodable {
 
 extension Op {
 
-    func apply(_ state: State) -> State {
-        var state = state
+    func apply(_ context: inout Context) {
         switch self {
         case let .frame(name: _, params: params):
-            var context = state.contexts.remove(index: state.current)
-            guard case let .args(args) = context.stack.last! else { fatalError() }
+            guard case let .dict(args) = context.stack.last! else { fatalError() }
+
+            // save the current vars
             context.stack.append(.dict(context.vars))
+            context.stack.append(.int(context.fp))
+
+            // match args with params
             context.vars = Dict()
             assert(args.count == params.count)
             for i in 0..<params.count {
-                context.vars[.atom(params[i])] = args[i]
+                context.vars[.atom(params[i])] = args.elements[i].value
             }
-            state.contexts.add(context)
-            state.current = state.contexts.index(forKey: context)!
+
+            context.fp = context.stack.count
+            context.pc += 1
+
+        case let .jump(pc: pc):
+            context.pc = pc
+
+        case let .delVar(varName):
+            context.vars[.atom(varName)] = nil
+            context.pc += 1
+
+        case let .loadVar(varName):
+            let value = context.vars[.atom(varName)]!
+            context.stack.append(value)
+            context.pc += 1
+
+        case let .nary(nary):
+            switch nary {
+            case .plus:
+                let rhs = context.stack.popLast()
+                let lhs = context.stack.popLast()
+
+                switch (lhs, rhs) {
+                case let (.int(lhs), .int(rhs)):
+                    context.stack.append(.int(lhs + rhs))
+
+                default:
+                    fatalError()
+                }
+
+            default:
+                fatalError()
+            }
+
+            context.pc += 1
+
+        case let .storeVar(varName):
+            let value = context.stack.popLast()!
+            context.vars[.atom(varName)] = value
+            context.pc += 1
+
+        case .ret:
+            let result = context.vars[.atom("result")] ?? .noneVal
+
+            guard case let .int(originalFp) = context.stack.popLast()! else { fatalError() }
+            context.fp = originalFp
+
+            guard case let .dict(originalVars) = context.stack.popLast()! else { fatalError() }
+            context.vars = originalVars
+
+            // pop call arguments
+            _ = context.stack.popLast()!
+
+            if context.stack.isEmpty {
+                context.terminated = true
+                return
+            }
+
+            guard case let .pc(returnPc) = context.stack.popLast()! else { fatalError() }
+            context.pc = returnPc
+
+            context.stack.append(result)
+
+        case let .push(value):
+            context.stack.append(value)
+            context.pc += 1
+
+        case .apply:
+            let args = context.stack.popLast()!
+            let f = context.stack.popLast()!
+
+            switch f {
+            case let .dict(dict):
+                context.stack.append(dict[args]!)
+
+            case let .pc(pc):
+                context.stack.append(.pc(context.pc + 1))
+                context.stack.append(args)
+                context.pc = pc
+
+            default:
+                fatalError()
+            }
+
+        case .pop:
+            _ = context.stack.popLast()!
+            context.pc += 1
 
         default:
             fatalError()
@@ -331,8 +431,14 @@ struct HVM: Decodable {
     let code: [Op]
 }
 
-let url = URL(fileURLWithPath: "Multiargs.hvm")
+let url = URL(fileURLWithPath: "/Users/williamma/Documents/sharm/multiargs.hvm")
 let hvmData = try Data(contentsOf: url)
 let hvm = try JSONDecoder().decode(HVM.self, from: hvmData)
 
-print(hvm.code)
+var context = Context()
+while !context.terminated {
+    print(context)
+    print(hvm.code[context.pc])
+    hvm.code[context.pc].apply(&context)
+}
+print(context)
