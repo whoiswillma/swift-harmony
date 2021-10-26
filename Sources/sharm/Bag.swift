@@ -16,6 +16,18 @@ struct Bag<T: Hashable> {
     private var collection: [T: Int]
     private(set) var count: Int = 0
 
+    init() {
+        collection = [:]
+    }
+
+    init(_ arr: [T]) {
+        collection = [:]
+
+        for elem in arr {
+            add(elem)
+        }
+    }
+
     mutating func add(_ value: T) -> Index {
         collection[value, default: 0] += 1
         count += 1
@@ -55,6 +67,14 @@ struct Bag<T: Hashable> {
         let value = get(index: index)
         remove(value)
         return value
+    }
+
+    func elements() -> Swift.Set<T> {
+        Swift.Set(collection.keys)
+    }
+
+    var startIndex: Index {
+        Index(index: collection.startIndex)
     }
 
 }

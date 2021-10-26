@@ -217,7 +217,7 @@ extension Op: Decodable {
 
 extension Op {
 
-    func apply(_ context: inout Context) -> Bool {
+    func applyDeterministic(_ context: inout Context) -> Bool {
         switch self {
         case let .frame(name: _, params: params):
             guard case let .dict(args) = context.stack.last! else { fatalError() }
@@ -350,6 +350,9 @@ extension Op {
             values.append(value)
             context.stack.append(.address(values))
 
+        case .sequential:
+            context.pc += 1
+
         default:
             return false
         }
@@ -357,7 +360,7 @@ extension Op {
         return true
     }
 
-    func applyNondeterminism(_ context: inout Context, nondeterminism: inout Nondeterminism) -> Bool {
+    func applyNondeterministic(to context: inout Context, nondeterminism: inout Nondeterminism) -> Bool {
         switch self {
         case .choose:
             guard case let .set(value) = context.stack.popLast()! else { fatalError() }
@@ -365,6 +368,8 @@ extension Op {
             let chosen = sorted[nondeterminism.chooseIndex(sorted)]
             context.stack.append(chosen)
 
+            context.pc += 1
+
         default:
             return false
         }
@@ -372,13 +377,13 @@ extension Op {
         return true
     }
 
-    func applyState(_ state: inout State) -> Bool {
+    func applyStateful(to state: inout State) -> Bool {
         switch self {
-        case .load(let valueOrNil):
+        case .load(let addressOrNil):
             var context = state.contexts.remove(index: state.current)
 
             let addresses: [Value]
-            if case let .address(addrs) = valueOrNil {
+            if case let .address(addrs) = addressOrNil {
                 addresses = addrs
             } else if case let .address(addrs) = context.stack.popLast()! {
                 addresses = addrs
@@ -393,16 +398,76 @@ extension Op {
             }
 
             let result = dict[addresses.last!]!
-
             context.stack.append(result)
 
+            context.pc += 1
             state.current = state.contexts.add(context)
+
+        case .store(let addressOrNil):
+            var context = state.contexts.remove(index: state.current)
+
+            let value = context.stack.popLast()!
+
+            let addresses: [Value]
+            if case let .address(addrs) = addressOrNil {
+                addresses = addrs
+            } else if case let .address(addrs) = context.stack.popLast()! {
+                addresses = addrs
+            } else {
+                fatalError()
+            }
+
+            var dict = state.vars
+            dict = dict.replacing(valueAt: addresses, with: value)!
+            state.vars = dict
+
+            context.pc += 1
+            state.current = state.contexts.add(context)
+
 
         default:
             return false
         }
 
         return true
+    }
+
+    func apply(to state: inout State) -> Bool {
+        var context = state.contexts.remove(index: state.current)
+        if applyDeterministic(&context) {
+            state.current = state.contexts.add(context)
+            return true
+        } else if applyNondeterministic(to: &context, nondeterminism: &state.nondeterminism) {
+            state.current = state.contexts.add(context)
+            return true
+        }
+
+        state.current = state.contexts.add(context)
+        if applyStateful(to: &state) {
+            return true
+        }
+
+        return false
+    }
+
+}
+
+private extension Dict {
+
+    func replacing(valueAt indexPath: [Value], with value: Value) -> Dict? {
+        assert(!indexPath.isEmpty)
+        if indexPath.count == 1 {
+            var copy = self
+            copy[indexPath[0]] = value
+            return copy
+        } else {
+            guard let index = index(forKey: indexPath[0]) else { return nil }
+            guard case let .dict(dict) = elements[index].value else { return nil }
+            guard let result = dict.replacing(valueAt: Array(indexPath[1...]), with: value) else { return nil }
+            var copy = self
+            copy[indexPath[0]] = .dict(result)
+            return copy
+        }
     }
 
 }
