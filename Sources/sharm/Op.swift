@@ -14,6 +14,7 @@ enum Nary: String, Hashable {
     case equals
     case dictAdd
     case plus
+    case atLabel
 
     var arity: Int {
         switch self {
@@ -22,6 +23,7 @@ enum Nary: String, Hashable {
         case .equals: return 2
         case .dictAdd: return 3
         case .plus: return 2
+        case .atLabel: return 1
         }
     }
 
@@ -33,12 +35,13 @@ enum Op: Hashable {
     case push(Value)
     case sequential
     case choose
-    case store(Value)
+    case store(Value?)
     case storeAddress
     case storeVar(String)
     case jump(pc: Int)
     case jumpCond(pc: Int, cond: Value)
     case loadVar(String)
+    case load(Value?)
     case address
     case nary(Nary)
     case atomicInc(lazy: Bool)
@@ -65,6 +68,7 @@ extension Op: Decodable {
         case arity
         case lazy
         case eternal
+        case cond
     }
 
     init(from decoder: Decoder) throws {
@@ -112,6 +116,21 @@ extension Op: Decodable {
             case "+":
                 nary = .plus
 
+            case "-":
+                nary = .minus
+
+            case "not":
+                nary = .not
+
+            case "==":
+                nary = .equals
+
+            case "atLabel":
+                nary = .atLabel
+
+            case "DictAdd":
+                nary = .dictAdd
+
             default:
                 fatalError(value)
             }
@@ -137,6 +156,58 @@ extension Op: Decodable {
         case "Pop":
             self = .pop
 
+        case "Load":
+            if values.contains(.value) {
+                let values = try values.decode([Value].self, forKey: .value)
+                self = .load(.address(values))
+            } else {
+                self = .load(nil)
+            }
+
+        case "Sequential":
+            self = .sequential
+
+        case "Store":
+            if values.contains(.value) {
+                let values = try values.decode([Value].self, forKey: .value)
+                self = .store(.address(values))
+            } else {
+                self = .store(nil)
+            }
+
+        case "Choose":
+            self = .choose
+
+        case "JumpCond":
+            let pc = Int(try values.decode(String.self, forKey: .pc))!
+            let cond = try values.decode(Value.self, forKey: .cond)
+            self = .jumpCond(pc: pc, cond: cond)
+
+        case "Address":
+            self = .address
+
+        case "AtomicInc":
+            let lazy = try values.decode(String.self, forKey: .lazy)
+            assert(lazy == "True" || lazy == "False")
+            self = .atomicInc(lazy: lazy == "True")
+
+        case "AtomicDec":
+            self = .atomicDec
+
+        case "ReadonlyInc":
+            self = .readonlyInc
+
+        case "ReadonlyDec":
+            self = .readonlyDec
+
+        case "Assert":
+            self = .assertOp
+
+        case "Spawn":
+            let eternal = try values.decode(String.self, forKey: .eternal)
+            assert(eternal == "True" || eternal == "False")
+            self = .spawn(eternal: eternal == "True")
+
         default:
             fatalError(op)
         }
@@ -146,7 +217,7 @@ extension Op: Decodable {
 
 extension Op {
 
-    func apply(_ context: inout Context) {
+    func apply(_ context: inout Context) -> Bool {
         switch self {
         case let .frame(name: _, params: params):
             guard case let .dict(args) = context.stack.last! else { fatalError() }
@@ -183,13 +254,29 @@ extension Op {
                 let rhs = context.stack.popLast()
                 let lhs = context.stack.popLast()
 
+                let result: Value
                 switch (lhs, rhs) {
                 case let (.int(lhs), .int(rhs)):
-                    context.stack.append(.int(lhs + rhs))
+                    result = .int(lhs + rhs)
 
                 default:
                     fatalError()
                 }
+                context.stack.append(result)
+
+            case .minus:
+                let rhs = context.stack.popLast()
+                let lhs = context.stack.popLast()
+
+                let result: Value
+                switch (lhs, rhs) {
+                case let (.int(lhs), .int(rhs)):
+                    result = .int(lhs - rhs)
+
+                default:
+                    fatalError()
+                }
+                context.stack.append(result)
 
             default:
                 fatalError()
@@ -203,7 +290,7 @@ extension Op {
             context.pc += 1
 
         case .ret:
-            let result = context.vars[.atom("result")] ?? .noneVal
+            let result = context.vars[.atom("result")] ?? .noneValue
 
             guard case let .int(originalFp) = context.stack.popLast()! else { fatalError() }
             context.fp = originalFp
@@ -216,7 +303,7 @@ extension Op {
 
             if context.stack.isEmpty {
                 context.terminated = true
-                return
+                break
             }
 
             guard case let .pc(returnPc) = context.stack.popLast()! else { fatalError() }
@@ -249,9 +336,73 @@ extension Op {
             _ = context.stack.popLast()!
             context.pc += 1
 
+        case let .jumpCond(pc: pc, cond: value):
+            let test = context.stack.popLast()!
+            if test == value {
+                context.pc = pc
+            } else {
+                context.pc += 1
+            }
+
+        case .address:
+            let value = context.stack.popLast()!
+            guard case var .address(values) = context.stack.popLast()! else { fatalError() }
+            values.append(value)
+            context.stack.append(.address(values))
+
         default:
-            fatalError()
+            return false
         }
+
+        return true
+    }
+
+    func applyNondeterminism(_ context: inout Context, nondeterminism: inout Nondeterminism) -> Bool {
+        switch self {
+        case .choose:
+            guard case let .set(value) = context.stack.popLast()! else { fatalError() }
+            let sorted = value.sorted()
+            let chosen = sorted[nondeterminism.chooseIndex(sorted)]
+            context.stack.append(chosen)
+
+        default:
+            return false
+        }
+
+        return true
+    }
+
+    func applyState(_ state: inout State) -> Bool {
+        switch self {
+        case .load(let valueOrNil):
+            var context = state.contexts.remove(index: state.current)
+
+            let addresses: [Value]
+            if case let .address(addrs) = valueOrNil {
+                addresses = addrs
+            } else if case let .address(addrs) = context.stack.popLast()! {
+                addresses = addrs
+            } else {
+                fatalError()
+            }
+
+            var dict = state.vars
+            for address in addresses[..<(addresses.count - 1)] {
+                guard case let .dict(d) = dict[address] else { fatalError() }
+                dict = d
+            }
+
+            let result = dict[addresses.last!]!
+
+            context.stack.append(result)
+
+            state.current = state.contexts.add(context)
+
+        default:
+            return false
+        }
+
+        return true
     }
 
 }

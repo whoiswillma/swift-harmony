@@ -29,3 +29,17 @@ extension Context: CustomStringConvertible {
     }
 
 }
+
+extension Context: Comparable {
+
+    static func < (lhs: Context, rhs: Context) -> Bool {
+        lhs.stack < rhs.stack
+        && lhs.pc < rhs.pc
+        && lhs.fp < rhs.fp
+        && lhs.vars < rhs.vars
+        && lhs.atomicLevel < rhs.atomicLevel
+        && lhs.readonlyLevel < rhs.readonlyLevel
+        && lhs.terminated < rhs.terminated
+    }
+
+}
