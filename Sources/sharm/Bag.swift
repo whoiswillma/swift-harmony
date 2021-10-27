@@ -31,7 +31,7 @@ struct Bag<T: Hashable> {
     mutating func add(_ value: T) -> Index {
         collection[value, default: 0] += 1
         count += 1
-        return index(forValue: value)!
+        return index(for: value)!
     }
 
     func contains(_ value: T) -> Bool {
@@ -55,7 +55,7 @@ struct Bag<T: Hashable> {
         }
     }
 
-    func index(forValue value: T) -> Index? {
+    func index(for value: T) -> Index? {
         collection.index(forKey: value).map { Index(index: $0) }
     }
 
@@ -75,6 +75,10 @@ struct Bag<T: Hashable> {
 
     var startIndex: Index {
         Index(index: collection.startIndex)
+    }
+
+    var randomIndex: Index {
+        index(for: collection.keys.randomElement()!)!
     }
 
 }

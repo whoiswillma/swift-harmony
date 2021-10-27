@@ -3,16 +3,9 @@
 import Foundation
 import OrderedCollections
 
-protocol Nondeterminism {
-
-    mutating func chooseIndex(_ values: [Value]) -> Int
-    mutating func chooseContext(_ context: Bag<Context>) -> Bag<Context>.Index
-
-}
-
 struct SimpleNondeterminism: Nondeterminism {
 
-    func chooseIndex(_ values: [Value]) -> Int {
+    func chooseIndex(_ values: Set) -> Int {
         Int.random(in: 0..<values.count)
     }
 
