@@ -215,6 +215,310 @@ extension Op: Decodable {
 
 }
 
+protocol OpVisitor {
+
+    mutating func frame(name: String, params: [String]) throws
+    mutating func push(_ value: Value) throws
+    mutating func sequential() throws
+    mutating func choose() throws
+    mutating func store(_ value: Value?) throws
+    mutating func storeAddress() throws
+    mutating func storeVar(_ varName: String) throws
+    mutating func jump(pc: Int) throws
+    mutating func jumpCond(pc: Int, cond: Value) throws
+    mutating func loadVar(_ varName: String) throws
+    mutating func load(_ value: Value?) throws
+    mutating func address() throws
+    mutating func nary(_ nary: Nary) throws
+    mutating func atomicInc(lazy: Bool) throws
+    mutating func atomicDec() throws
+    mutating func readonlyInc() throws
+    mutating func readonlyDec() throws
+    mutating func assertOp() throws
+    mutating func delVar(_ varName: String) throws
+    mutating func ret() throws
+    mutating func spawn(eternal: Bool) throws
+    mutating func apply() throws
+    mutating func pop() throws
+
+}
+
+//extension OpVisitor {
+//
+//    mutating func frame(name: String, params: [String]) throws { fatalError() }
+//    mutating func push(_ value: Value) throws { fatalError() }
+//    mutating func sequential() throws { fatalError() }
+//    mutating func choose() throws { fatalError() }
+//    mutating func store(_ value: Value?) throws { fatalError() }
+//    mutating func storeAddress() throws { fatalError() }
+//    mutating func storeVar(_ varName: String) throws { fatalError() }
+//    mutating func jump(pc: Int) throws { fatalError() }
+//    mutating func jumpCond(pc: Int, cond: Value) throws { fatalError() }
+//    mutating func loadVar(_ varName: String) throws { fatalError() }
+//    mutating func load(_ value: Value?) throws { fatalError() }
+//    mutating func address() throws { fatalError() }
+//    mutating func nary(_ nary: Nary) throws { fatalError() }
+//    mutating func atomicInc(lazy: Bool) throws { fatalError() }
+//    mutating func atomicDec() throws { fatalError() }
+//    mutating func readonlyInc() throws { fatalError() }
+//    mutating func readonlyDec() throws { fatalError() }
+//    mutating func assertOp() throws { fatalError() }
+//    mutating func delVar(_ varName: String) throws { fatalError() }
+//    mutating func ret() throws { fatalError() }
+//    mutating func spawn(eternal: Bool) throws { fatalError() }
+//    mutating func apply() throws { fatalError() }
+//    mutating func pop() throws { fatalError() }
+//
+//}
+
+extension Op {
+
+    func accept(_ visitor: inout OpVisitor) throws {
+        switch self {
+        case .frame(name: let name, params: let params):
+            try visitor.frame(name: name, params: params)
+        case .push(let value):
+            try visitor.push(value)
+        case .sequential:
+            try visitor.sequential()
+        case .choose:
+            try visitor.choose()
+        case .store(let value):
+            try visitor.store(value)
+        case .storeAddress:
+            try visitor.storeAddress()
+        case .storeVar(let varName):
+            try visitor.storeVar(varName)
+        case .jump(pc: let pc):
+            try visitor.jump(pc: pc)
+        case .jumpCond(pc: let pc, cond: let cond):
+            try visitor.jumpCond(pc: pc, cond: cond)
+        case .loadVar(let varName):
+            try visitor.loadVar(varName)
+        case .load(let value):
+            try visitor.load(value)
+        case .address:
+            try visitor.address()
+        case .nary(let nary):
+            try visitor.nary(nary)
+        case .atomicInc(lazy: let lazy):
+            try visitor.atomicInc(lazy: lazy)
+        case .atomicDec:
+            try visitor.atomicDec()
+        case .readonlyInc:
+            try visitor.readonlyInc()
+        case .readonlyDec:
+            try visitor.readonlyDec()
+        case .assertOp:
+            try visitor.assertOp()
+        case .delVar(let varName):
+            try visitor.delVar(varName)
+        case .ret:
+            try visitor.ret()
+        case .spawn(eternal: let eternal):
+            try visitor.spawn(eternal: eternal)
+        case .apply:
+            try visitor.apply()
+        case .pop:
+            try visitor.pop()
+        }
+    }
+
+}
+
+struct DeterministicContextOpVisitor: OpVisitor {
+
+    var context: Context
+    var unimplemented: Bool = false
+
+    mutating func frame(name: String, params: [String]) throws {
+        guard case let .dict(args) = context.stack.last! else { fatalError() }
+
+        // save the current vars
+        context.stack.append(.dict(context.vars))
+        context.stack.append(.int(context.fp))
+
+        // match args with params
+        context.vars = Dict()
+        assert(args.count == params.count)
+        for i in 0..<params.count {
+            context.vars[.atom(params[i])] = args.elements[i].value
+        }
+
+        context.fp = context.stack.count
+        context.pc += 1
+    }
+
+    mutating func jump(pc: Int) throws {
+        context.pc = pc
+    }
+
+    mutating func delVar(_ varName: String) throws {
+        context.vars[.atom(varName)] = nil
+        context.pc += 1
+    }
+
+    mutating func loadVar(_ varName: String) throws {
+        let value = context.vars[.atom(varName)]!
+        context.stack.append(value)
+        context.pc += 1
+    }
+
+    mutating func nary(_ nary: Nary) throws {
+        switch nary {
+        case .plus:
+            let rhs = context.stack.popLast()
+            let lhs = context.stack.popLast()
+
+            let result: Value
+            switch (lhs, rhs) {
+            case let (.int(lhs), .int(rhs)):
+                result = .int(lhs + rhs)
+
+            default:
+                fatalError()
+            }
+            context.stack.append(result)
+
+        case .minus:
+            let rhs = context.stack.popLast()
+            let lhs = context.stack.popLast()
+
+            let result: Value
+            switch (lhs, rhs) {
+            case let (.int(lhs), .int(rhs)):
+                result = .int(lhs - rhs)
+
+            default:
+                fatalError()
+            }
+            context.stack.append(result)
+
+        default:
+            fatalError()
+        }
+
+        context.pc += 1
+    }
+
+    mutating func storeVar(_ varName: String) throws {
+        let value = context.stack.popLast()!
+        context.vars[.atom(varName)] = value
+        context.pc += 1
+    }
+
+    mutating func ret() throws {
+        let result = context.vars[.atom("result")] ?? .noneValue
+
+        guard case let .int(originalFp) = context.stack.popLast()! else { fatalError() }
+        context.fp = originalFp
+
+        guard case let .dict(originalVars) = context.stack.popLast()! else { fatalError() }
+        context.vars = originalVars
+
+        // pop call arguments
+        _ = context.stack.popLast()!
+
+        if context.stack.isEmpty {
+            context.terminated = true
+            return
+        }
+
+        guard case let .pc(returnPc) = context.stack.popLast()! else { fatalError() }
+        context.pc = returnPc
+
+        context.stack.append(result)
+    }
+
+    mutating func push(_ value: Value) throws {
+        let args = context.stack.popLast()!
+        let f = context.stack.popLast()!
+
+        switch f {
+        case let .dict(dict):
+            context.stack.append(dict[args]!)
+
+        case let .pc(pc):
+            context.stack.append(.pc(context.pc + 1))
+            context.stack.append(args)
+            context.pc = pc
+
+        default:
+            fatalError()
+        }
+    }
+
+    mutating func pop() throws {
+        _ = context.stack.popLast()!
+        context.pc += 1
+    }
+
+    mutating func jumpCond(pc: Int, cond: Value) throws {
+        let test = context.stack.popLast()!
+        if test == cond {
+            context.pc = pc
+        } else {
+            context.pc += 1
+        }
+    }
+
+    mutating func address() throws {
+        let value = context.stack.popLast()!
+        guard case var .address(values) = context.stack.popLast()! else { fatalError() }
+        values.append(value)
+        context.stack.append(.address(values))
+    }
+
+    mutating func sequential() throws {
+        context.pc += 1
+    }
+
+    mutating func choose() throws {
+        unimplemented = true
+    }
+
+    mutating func store(_ value: Value?) throws {
+        unimplemented = true
+    }
+
+    mutating func storeAddress() throws {
+        unimplemented = true
+    }
+
+    mutating func load(_ value: Value?) throws {
+        unimplemented = true
+    }
+
+    mutating func atomicInc(lazy: Bool) throws {
+        unimplemented = true
+    }
+
+    mutating func atomicDec() throws {
+        unimplemented = true
+    }
+
+    mutating func readonlyInc() throws {
+        unimplemented = true
+    }
+
+    mutating func readonlyDec() throws {
+        unimplemented = true
+    }
+
+    mutating func assertOp() throws {
+        unimplemented = true
+    }
+
+    mutating func spawn(eternal: Bool) throws {
+        unimplemented = true
+    }
+
+    mutating func apply() throws {
+        unimplemented = true
+    }
+
+}
+
 extension Op {
 
     func applyDeterministic(_ context: inout Context) -> Bool {
@@ -433,17 +737,16 @@ extension Op {
     }
 
     func apply(to state: inout State) -> Bool {
-        var context = state.contexts.remove(index: state.current)
-        if applyDeterministic(&context) {
-            state.current = state.contexts.add(context)
+        var newContext = state.contexts.get(index: state.current)
+        if applyDeterministic(&newContext) {
+            _ = state.contexts.remove(index: state.current)
+            state.current = state.contexts.add(newContext)
             return true
-        } else if applyNondeterministic(to: &context, nondeterminism: &state.nondeterminism) {
-            state.current = state.contexts.add(context)
+        } else if applyNondeterministic(to: &newContext, nondeterminism: &state.nondeterminism) {
+            _ = state.contexts.remove(index: state.current)
+            state.current = state.contexts.add(newContext)
             return true
-        }
-
-        state.current = state.contexts.add(context)
-        if applyStateful(to: &state) {
+        } else if applyStateful(to: &state) {
             return true
         }
 
