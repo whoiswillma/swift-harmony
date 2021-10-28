@@ -144,23 +144,23 @@ struct HVM: Decodable {
     let code: [Op]
 }
 
-let url = URL(fileURLWithPath: "/Users/williamma/Documents/sharm/Diners.hvm")
+let url = URL(fileURLWithPath: "/Users/williamma/Documents/sharm/Peterson.hvm")
 let hvmData = try Data(contentsOf: url)
 let hvm = try JSONDecoder().decode(HVM.self, from: hvmData)
 
 private let interpreter = Interpreter(code: hvm.code)
 do {
-    while !interpreter.allTerminated {
-        try interpreter.step()
-    }
-} catch {
-    print("History")
-    for elem in interpreter.nondeterminism.history {
-        switch elem {
-        case .index(let i, let s): print("\tChose \(i) out of \(s)")
-        case .context(let i, let s): print("\tChose \(i) out of \(s)")
+    defer {
+        print("History")
+        for elem in interpreter.nondeterminism.history {
+            switch elem {
+            case .index(let i, let s): print("\tChose \(i) out of \(s)")
+            case .context(let i, let s): print("\tChose \(i) out of \(s)")
+            }
         }
     }
 
-    throw error
+    while !interpreter.allTerminated {
+        try interpreter.step()
+    }
 }
