@@ -7,6 +7,21 @@
 
 import Foundation
 
+enum OpError: Error {
+
+    case typeMismatch(expected: Swift.Set<ValueType>, actual: [ValueType])
+    case assertionFailure
+    case unimplemented
+    case stackIsEmpty
+    case contextIsReadonly
+    case contextIsAtomic
+    case contextIsNotAtomic
+    case stackTypeMismatch(expected: ValueType)
+    case invalidAddress(address: Value)
+    case invalidCalltype(Int)
+
+}
+
 enum Nary: String, Hashable {
 
     case minus
@@ -29,6 +44,123 @@ enum Nary: String, Hashable {
 
 }
 
+enum NaryImpl {
+
+    static func plus(context: inout Context) throws {
+        guard let rhs = context.stack.popLast(),
+              let lhs = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        let result: Value
+        switch (lhs, rhs) {
+        case let (.int(lhs), .int(rhs)):
+            result = .int(lhs + rhs)
+
+        default:
+            throw OpError.typeMismatch(expected: [.int], actual: [lhs.type, rhs.type])
+        }
+
+        context.stack.append(result)
+    }
+
+    static func minus(context: inout Context) throws {
+        guard let rhs = context.stack.popLast(),
+              let lhs = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        let result: Value
+        switch (lhs, rhs) {
+        case let (.int(lhs), .int(rhs)):
+            result = .int(lhs - rhs)
+
+        default:
+            throw OpError.typeMismatch(expected: [.int], actual: [lhs.type, rhs.type])
+        }
+
+        context.stack.append(result)
+    }
+
+    static func not(context: inout Context) throws {
+        guard let op = context.stack.popLast() else { throw OpError.stackIsEmpty }
+
+        let result: Value
+        switch op {
+        case let .bool(b):
+            result = .bool(!b)
+
+        default:
+            throw OpError.typeMismatch(expected: [.bool], actual: [op.type])
+        }
+
+        context.stack.append(result)
+    }
+
+    static func atLabel(context: inout Context, contextBag: Bag<Context>) throws {
+        struct ResultKey: Hashable {
+            let entry: Int
+            let arg: Value
+        }
+
+        guard context.isAtomic else {
+            throw OpError.contextIsNotAtomic
+        }
+
+        guard case let .pc(pc) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .pc)
+        }
+
+        var result = [ResultKey: Int]()
+        for (context, count) in contextBag.elementsWithCount() {
+            if context.pc == pc {
+                result[ResultKey(entry: context.entry, arg: context.arg), default: 0] += count
+            }
+        }
+
+        let value = Value.dict(Dict(uniqueKeysWithValues: result.map({ resultKey, count in
+            (.dict([.int(0): .pc(resultKey.entry), .int(1): resultKey.arg]), .int(count))
+        })))
+
+        context.stack.append(value)
+        context.pc += 1
+    }
+
+    static func dictAdd(context: inout Context) throws {
+        guard let value = context.stack.popLast(),
+              let key = context.stack.popLast(),
+              let dict = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        guard case var .dict(dict) = dict else {
+            throw OpError.typeMismatch(expected: [.dict], actual: [dict.type])
+        }
+
+        if let existingValue = dict[key] {
+            dict[key] = max(value, existingValue)
+        } else {
+            dict[key] = value
+        }
+
+        context.stack.append(.dict(dict))
+    }
+
+    static func equals(context: inout Context) throws {
+        guard let lhs = context.stack.popLast(),
+              let rhs = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        context.stack.append(.bool(lhs == rhs))
+    }
+
+}
+
 enum Op: Hashable {
 
     case frame(name: String, params: [String])
@@ -36,7 +168,6 @@ enum Op: Hashable {
     case sequential
     case choose
     case store(Value?)
-    case storeAddress
     case storeVar(String)
     case jump(pc: Int)
     case jumpCond(pc: Int, cond: Value)
@@ -222,7 +353,6 @@ protocol OpVisitor {
     mutating func sequential() throws
     mutating func choose() throws
     mutating func store(_ value: Value?) throws
-    mutating func storeAddress() throws
     mutating func storeVar(_ varName: String) throws
     mutating func jump(pc: Int) throws
     mutating func jumpCond(pc: Int, cond: Value) throws
@@ -245,7 +375,7 @@ protocol OpVisitor {
 
 extension Op {
 
-    func accept(_ visitor: inout OpVisitor) throws {
+    func accept<T: OpVisitor>(_ visitor: inout T) throws {
         switch self {
         case .frame(name: let name, params: let params):
             try visitor.frame(name: name, params: params)
@@ -257,8 +387,6 @@ extension Op {
             try visitor.choose()
         case .store(let value):
             try visitor.store(value)
-        case .storeAddress:
-            try visitor.storeAddress()
         case .storeVar(let varName):
             try visitor.storeVar(varName)
         case .jump(pc: let pc):
@@ -301,17 +429,27 @@ extension Op {
 enum OpImpl {
 
     static func frame(context: inout Context, name: String, params: [String]) throws {
-        guard case let .dict(args) = context.stack.last! else { fatalError() }
+        guard let args = context.stack.last else {
+            throw OpError.stackIsEmpty
+        }
 
         // save the current vars
         context.stack.append(.dict(context.vars))
         context.stack.append(.int(context.fp))
 
-        // match args with params
         context.vars = Dict()
-        assert(args.count == params.count)
-        for i in 0..<params.count {
-            context.vars[.atom(params[i])] = args.elements[i].value
+        switch args {
+        case let .dict(args):
+            // match args with params
+            assert(args.count == params.count)
+            for i in 0..<params.count {
+                context.vars[.atom(params[i])] = args.elements[i].value
+            }
+
+        default:
+            assert(params.count == 1)
+            context.vars[.atom(params[0])] = args
+
         }
 
         context.fp = context.stack.count
@@ -333,41 +471,38 @@ enum OpImpl {
         context.pc += 1
     }
 
-    static func nary(context: inout Context, _ nary: Nary) throws {
-        switch nary {
+    static func nary(context: inout Context, _ n: Nary) throws {
+        switch n {
         case .plus:
-            let rhs = context.stack.popLast()
-            let lhs = context.stack.popLast()
-
-            let result: Value
-            switch (lhs, rhs) {
-            case let (.int(lhs), .int(rhs)):
-                result = .int(lhs + rhs)
-
-            default:
-                fatalError()
-            }
-            context.stack.append(result)
+            try NaryImpl.plus(context: &context)
 
         case .minus:
-            let rhs = context.stack.popLast()
-            let lhs = context.stack.popLast()
+            try NaryImpl.minus(context: &context)
 
-            let result: Value
-            switch (lhs, rhs) {
-            case let (.int(lhs), .int(rhs)):
-                result = .int(lhs - rhs)
+        case .not:
+            try NaryImpl.not(context: &context)
 
-            default:
-                fatalError()
-            }
-            context.stack.append(result)
+        case .dictAdd:
+            try NaryImpl.dictAdd(context: &context)
+
+        case .equals:
+            try NaryImpl.equals(context: &context)
 
         default:
-            fatalError()
+            throw OpError.unimplemented
         }
 
         context.pc += 1
+    }
+
+    static func nary(context: inout Context, contextBag: Bag<Context>, _ n: Nary) throws {
+        switch n {
+        case .atLabel:
+            try NaryImpl.atLabel(context: &context, contextBag: contextBag)
+
+        default:
+            try nary(context: &context, n)
+        }
     }
 
     static func storeVar(context: inout Context, _ varName: String) throws {
@@ -379,10 +514,14 @@ enum OpImpl {
     static func ret(context: inout Context) throws {
         let result = context.vars[.atom("result")] ?? .noneValue
 
-        guard case let .int(originalFp) = context.stack.popLast()! else { fatalError() }
+        guard case let .int(originalFp) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .int)
+        }
         context.fp = originalFp
 
-        guard case let .dict(originalVars) = context.stack.popLast()! else { fatalError() }
+        guard case let .dict(originalVars) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .dict)
+        }
         context.vars = originalVars
 
         // pop call arguments
@@ -393,28 +532,30 @@ enum OpImpl {
             return
         }
 
-        guard case let .pc(returnPc) = context.stack.popLast()! else { fatalError() }
-        context.pc = returnPc
+        guard case let .int(calltype) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .int)
+        }
+        guard let calltype = Calltype(rawValue: calltype) else {
+            throw OpError.invalidCalltype(calltype)
+        }
 
-        context.stack.append(result)
+        switch calltype {
+        case .normal:
+            guard case let .pc(returnPc) = context.stack.popLast() else {
+                throw OpError.stackTypeMismatch(expected: .pc)
+            }
+            context.pc = returnPc
+
+            context.stack.append(result)
+
+        case .process:
+            context.terminated = true
+        }
     }
 
     static func push(context: inout Context, _ value: Value) throws {
-        let args = context.stack.popLast()!
-        let f = context.stack.popLast()!
-
-        switch f {
-        case let .dict(dict):
-            context.stack.append(dict[args]!)
-
-        case let .pc(pc):
-            context.stack.append(.pc(context.pc + 1))
-            context.stack.append(args)
-            context.pc = pc
-
-        default:
-            fatalError()
-        }
+        context.stack.append(value)
+        context.pc += 1
     }
 
     static func pop(context: inout Context) throws {
@@ -433,12 +574,18 @@ enum OpImpl {
 
     static func address(context: inout Context) throws {
         let value = context.stack.popLast()!
-        guard case var .address(values) = context.stack.popLast()! else { fatalError() }
+        guard case var .address(values) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .address)
+        }
         values.append(value)
         context.stack.append(.address(values))
+        context.pc += 1
     }
 
     static func sequential(context: inout Context) throws {
+        guard case .address = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .address)
+        }
         context.pc += 1
     }
 
@@ -481,22 +628,101 @@ enum OpImpl {
         vars: inout Dict,
         _ addressOrNil: Value?
     ) throws {
-        let value = context.stack.popLast()!
+        if context.isReadonly { throw OpError.contextIsReadonly }
+        guard let value = context.stack.popLast() else { throw OpError.stackIsEmpty }
 
-        let addresses: [Value]
+        let indexPath: [Value]
         if case let .address(addrs) = addressOrNil {
-            addresses = addrs
+            indexPath = addrs
         } else if case let .address(addrs) = context.stack.popLast()! {
-            addresses = addrs
+            indexPath = addrs
         } else {
             fatalError()
         }
 
-        var dict = state.vars
-        dict = dict.replacing(valueAt: addresses, with: value)!
-        state.vars = dict
+        guard let result = vars.replacing(valueAt: indexPath, with: value) else {
+            throw OpError.invalidAddress(address: .address(indexPath))
+        }
+
+        vars = result
 
         context.pc += 1
+    }
+
+    static func apply(context: inout Context) throws {
+        let args = context.stack.popLast()!
+        let f = context.stack.popLast()!
+
+        switch f {
+        case let .dict(dict):
+            context.stack.append(dict[args]!)
+            context.pc += 1
+
+        case let .pc(pc):
+            context.stack.append(.pc(context.pc + 1))
+            context.stack.append(args)
+            context.pc = pc
+
+        default:
+            fatalError()
+        }
+    }
+
+    static func readonlyInc(context: inout Context) throws {
+        assert(context.readonlyLevel >= 0)
+        context.readonlyLevel += 1
+        context.pc += 1
+    }
+
+    static func readonlyDec(context: inout Context) throws {
+        context.readonlyLevel -= 1
+        assert(context.readonlyLevel >= 0)
+        context.pc += 1
+    }
+
+    static func assertOp(context: inout Context) throws {
+        guard case let .bool(b) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .bool)
+        }
+
+        if !b {
+            throw OpError.assertionFailure
+        }
+
+        context.pc += 1
+    }
+
+    static func atomicInc(context: inout Context, lazy: Bool) throws {
+        assert(context.atomicLevel >= 0)
+        context.atomicLevel += 1
+        context.pc += 1
+    }
+
+    static func atomicDec(context: inout Context) throws {
+        context.atomicLevel -= 1
+        assert(context.atomicLevel >= 0)
+        context.pc += 1
+    }
+
+    static func spawn(parent: inout Context, name: String, eternal: Bool) throws -> Context {
+        guard let this = parent.stack.popLast(),
+              let arg = parent.stack.popLast(),
+              let pc = parent.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        guard case let .pc(pc) = pc else {
+            throw OpError.typeMismatch(expected: [.pc], actual: [.pc])
+        }
+
+        parent.pc += 1
+        return Context(
+            name: name,
+            entry: pc,
+            arg: arg,
+            stack: [.int(Calltype.process.rawValue), arg]
+        )
     }
 
 }
@@ -577,6 +803,30 @@ extension DeterministicContextOpVisitor {
         try OpImpl.sequential(context: &context)
     }
 
+    mutating func apply() throws {
+        try OpImpl.apply(context: &context)
+    }
+
+    mutating func readonlyInc() throws {
+        try OpImpl.readonlyInc(context: &context)
+    }
+
+    mutating func readonlyDec() throws {
+        try OpImpl.readonlyDec(context: &context)
+    }
+
+    mutating func atomicInc(lazy: Bool) throws {
+        try OpImpl.atomicInc(context: &context, lazy: lazy)
+    }
+
+    mutating func atomicDec() throws {
+        try OpImpl.atomicDec(context: &context)
+    }
+
+    mutating func assertOp() throws {
+        try OpImpl.assertOp(context: &context)
+    }
+
 }
 
 //extension OpVisitor {
@@ -586,7 +836,6 @@ extension DeterministicContextOpVisitor {
 //    mutating func sequential() throws { fatalError() }
 //    mutating func choose() throws { fatalError() }
 //    mutating func store(_ value: Value?) throws { fatalError() }
-//    mutating func storeAddress() throws { fatalError() }
 //    mutating func storeVar(_ varName: String) throws { fatalError() }
 //    mutating func jump(pc: Int) throws { fatalError() }
 //    mutating func jumpCond(pc: Int, cond: Value) throws { fatalError() }

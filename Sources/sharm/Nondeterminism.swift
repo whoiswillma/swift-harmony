@@ -10,6 +10,6 @@ import Foundation
 protocol Nondeterminism {
 
     func chooseIndex(_ values: Set) -> Int
-    func chooseContext(_ context: Bag<Context>) -> Bag<Context>.Index
+    func chooseContext(_ context: [Context]) -> Int
 
 }

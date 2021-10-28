@@ -24,11 +24,11 @@ struct Bag<T: Hashable> {
         collection = [:]
 
         for elem in arr {
-            add(elem)
+            _ = add(elem)
         }
     }
 
-    mutating func add(_ value: T) -> Index {
+    @discardableResult mutating func add(_ value: T) -> Index {
         collection[value, default: 0] += 1
         count += 1
         return index(for: value)!
@@ -71,6 +71,20 @@ struct Bag<T: Hashable> {
 
     func elements() -> Swift.Set<T> {
         Swift.Set(collection.keys)
+    }
+
+    func elementsWithMultiplicity() -> [T] {
+        var elements = [T]()
+        for (element, multiplicity) in collection {
+            for _ in 1...multiplicity {
+                elements.append(element)
+            }
+        }
+        return elements
+    }
+
+    func elementsWithCount() -> [(T, Int)] {
+        return Array(collection)
     }
 
     var startIndex: Index {

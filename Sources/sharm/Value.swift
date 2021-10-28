@@ -51,13 +51,37 @@ extension Array: Comparable where Element: Comparable {
 
 struct Context: Hashable {
 
-    var stack: [Value] = [.dict(Dict())]
-    var pc: Int = 0
-    var fp: Int = 0 // unused?
-    var vars: Dict = Dict()
-    var atomicLevel: Int = 0
-    var readonlyLevel: Int = 0
+    let name: String
+    let entry: Int
+    let arg: Value
+
+    var stack: [Value]
+    var pc: Int
+    var fp: Int // unused?
+    var vars: Dict
+    var atomicLevel: Int
+    var readonlyLevel: Int
+
     var terminated: Bool = false
+    var isAtomic: Bool {
+        atomicLevel > 0
+    }
+    var isReadonly: Bool {
+        readonlyLevel > 0
+    }
+
+    init(name: String, entry: Int, arg: Value, stack: [Value]) {
+        self.name = name
+        self.entry = entry
+        self.arg = arg
+
+        self.stack = stack
+        self.pc = entry
+        self.fp = 0
+        self.vars = Dict()
+        self.atomicLevel = 0
+        self.readonlyLevel = 0
+    }
 
 }
 
@@ -75,7 +99,10 @@ extension Context: CustomStringConvertible {
 extension Context: Comparable {
 
     static func < (lhs: Context, rhs: Context) -> Bool {
-        lhs.stack < rhs.stack
+        lhs.name < rhs.name
+        && lhs.entry < rhs.entry
+        && lhs.arg < rhs.arg
+        && lhs.stack < rhs.stack
         && lhs.pc < rhs.pc
         && lhs.fp < rhs.fp
         && lhs.vars < rhs.vars
@@ -83,6 +110,25 @@ extension Context: Comparable {
         && lhs.readonlyLevel < rhs.readonlyLevel
         && lhs.terminated < rhs.terminated
     }
+
+}
+
+enum Calltype: Int {
+    case process = 1
+    case normal = 2
+}
+
+// It is an important condition that these are in the same order as in Charm!
+enum ValueType: Int, Hashable {
+
+    case atom
+    case bool
+    case int
+    case dict
+    case address
+    case pc
+    case set
+    case context
 
 }
 
@@ -97,16 +143,16 @@ indirect enum Value: Hashable {
     case set(Set)
     case context(Context)
 
-    var typeInt: Int {
+    var type: ValueType {
         switch self {
-        case .bool: return 0
-        case .int: return 1
-        case .atom: return 2
-        case .pc: return 3
-        case .dict: return 4
-        case .set: return 5
-        case .address: return 6
-        case .context: return 7
+        case .atom: return .atom
+        case .bool: return .bool
+        case .int: return .int
+        case .dict: return .dict
+        case .address: return .address
+        case .pc: return .pc
+        case .set: return .set
+        case .context: return .context
         }
     }
 
@@ -140,7 +186,7 @@ extension Value: Comparable {
     }
 
     static func < (lhs: Value, rhs: Value) -> Bool {
-        if lhs.typeInt < rhs.typeInt {
+        if lhs.type.rawValue < rhs.type.rawValue {
             return true
         }
 
