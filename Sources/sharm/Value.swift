@@ -58,7 +58,7 @@ struct Context: Hashable {
     var stack: [Value]
     var pc: Int
     var fp: Int // unused?
-    var vars: Dict
+    var vars: Dict // scoped-storage
     var atomicLevel: Int
     var readonlyLevel: Int
 

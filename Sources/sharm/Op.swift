@@ -11,168 +11,32 @@ enum OpError: Error {
 
     case typeMismatch(expected: Swift.Set<ValueType>, actual: [ValueType])
     case assertionFailure
-    case unimplemented
+    case unimplemented(String?)
     case stackIsEmpty
     case contextIsReadonly
     case contextIsAtomic
     case contextIsNotAtomic
     case stackTypeMismatch(expected: ValueType)
     case invalidAddress(address: Value)
+    case unknownVar(varName: String)
+    case varTypeMismatch(varName: String, expected: ValueType)
     case invalidCalltype(Int)
-
-}
-
-enum Nary: String, Hashable {
-
-    case minus
-    case not
-    case equals
-    case dictAdd
-    case plus
-    case atLabel
-
-    var arity: Int {
-        switch self {
-        case .minus: return 2
-        case .not: return 1
-        case .equals: return 2
-        case .dictAdd: return 3
-        case .plus: return 2
-        case .atLabel: return 1
-        }
-    }
-
-}
-
-enum NaryImpl {
-
-    static func plus(context: inout Context) throws {
-        guard let rhs = context.stack.popLast(),
-              let lhs = context.stack.popLast()
-        else {
-            throw OpError.stackIsEmpty
-        }
-
-        let result: Value
-        switch (lhs, rhs) {
-        case let (.int(lhs), .int(rhs)):
-            result = .int(lhs + rhs)
-
-        default:
-            throw OpError.typeMismatch(expected: [.int], actual: [lhs.type, rhs.type])
-        }
-
-        context.stack.append(result)
-    }
-
-    static func minus(context: inout Context) throws {
-        guard let rhs = context.stack.popLast(),
-              let lhs = context.stack.popLast()
-        else {
-            throw OpError.stackIsEmpty
-        }
-
-        let result: Value
-        switch (lhs, rhs) {
-        case let (.int(lhs), .int(rhs)):
-            result = .int(lhs - rhs)
-
-        default:
-            throw OpError.typeMismatch(expected: [.int], actual: [lhs.type, rhs.type])
-        }
-
-        context.stack.append(result)
-    }
-
-    static func not(context: inout Context) throws {
-        guard let op = context.stack.popLast() else { throw OpError.stackIsEmpty }
-
-        let result: Value
-        switch op {
-        case let .bool(b):
-            result = .bool(!b)
-
-        default:
-            throw OpError.typeMismatch(expected: [.bool], actual: [op.type])
-        }
-
-        context.stack.append(result)
-    }
-
-    static func atLabel(context: inout Context, contextBag: Bag<Context>) throws {
-        struct ResultKey: Hashable {
-            let entry: Int
-            let arg: Value
-        }
-
-        guard context.isAtomic else {
-            throw OpError.contextIsNotAtomic
-        }
-
-        guard case let .pc(pc) = context.stack.popLast() else {
-            throw OpError.stackTypeMismatch(expected: .pc)
-        }
-
-        var result = [ResultKey: Int]()
-        for (context, count) in contextBag.elementsWithCount() {
-            if context.pc == pc {
-                result[ResultKey(entry: context.entry, arg: context.arg), default: 0] += count
-            }
-        }
-
-        let value = Value.dict(Dict(uniqueKeysWithValues: result.map({ resultKey, count in
-            (.dict([.int(0): .pc(resultKey.entry), .int(1): resultKey.arg]), .int(count))
-        })))
-
-        context.stack.append(value)
-        context.pc += 1
-    }
-
-    static func dictAdd(context: inout Context) throws {
-        guard let value = context.stack.popLast(),
-              let key = context.stack.popLast(),
-              let dict = context.stack.popLast()
-        else {
-            throw OpError.stackIsEmpty
-        }
-
-        guard case var .dict(dict) = dict else {
-            throw OpError.typeMismatch(expected: [.dict], actual: [dict.type])
-        }
-
-        if let existingValue = dict[key] {
-            dict[key] = max(value, existingValue)
-        } else {
-            dict[key] = value
-        }
-
-        context.stack.append(.dict(dict))
-    }
-
-    static func equals(context: inout Context) throws {
-        guard let lhs = context.stack.popLast(),
-              let rhs = context.stack.popLast()
-        else {
-            throw OpError.stackIsEmpty
-        }
-
-        context.stack.append(.bool(lhs == rhs))
-    }
+    case setIsEmpty
 
 }
 
 enum Op: Hashable {
 
-    case frame(name: String, params: [String])
-    case push(Value)
+    case frame(name: String, params: VarTree)
+    case push(value: Value)
     case sequential
     case choose
-    case store(Value?)
-    case storeVar(String)
+    case store(address: Value?)
+    case storeVar(varTree: VarTree?)
     case jump(pc: Int)
     case jumpCond(pc: Int, cond: Value)
-    case loadVar(String)
-    case load(Value?)
+    case loadVar(varName: String?)
+    case load(address: Value?)
     case address
     case nary(Nary)
     case atomicInc(lazy: Bool)
@@ -180,255 +44,39 @@ enum Op: Hashable {
     case readonlyInc
     case readonlyDec
     case assertOp
-    case delVar(String)
+    case delVar(varName: String?)
     case ret
     case spawn(eternal: Bool)
     case apply
     case pop
-
-}
-
-extension Op: Decodable {
-
-    enum CodingKeys: String, CodingKey {
-        case op
-        case name
-        case args
-        case value
-        case pc
-        case arity
-        case lazy
-        case eternal
-        case cond
-    }
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        let op = try values.decode(String.self, forKey: .op)
-
-        switch op {
-        case "Frame":
-            let name = try values.decode(String.self, forKey: .name)
-            let params = try values.decode(String.self, forKey: .args)
-            if params == "()" {
-                self = .frame(name: name, params: [])
-            } else if params.starts(with: "(") {
-                let afterFirst = params.index(after: params.startIndex)
-                let beforeLast = params.index(before: params.endIndex)
-                assert(params[beforeLast] == ")")
-                let commaSeparated = params[afterFirst..<beforeLast]
-                    .split(separator: ",")
-                    .map {
-                        $0.trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
-                self = .frame(name: name, params: commaSeparated)
-            } else {
-                // just one param
-                self = .frame(name: name, params: [params])
-            }
-
-        case "Jump":
-            let pc = Int(try values.decode(String.self, forKey: .pc))!
-            self = .jump(pc: pc)
-
-        case "DelVar":
-            let value = try values.decode(String.self, forKey: .value)
-            self = .delVar(value)
-
-        case "LoadVar":
-            let value = try values.decode(String.self, forKey: .value)
-            self = .loadVar(value)
-
-        case "Nary":
-            let value = try values.decode(String.self, forKey: .value)
-
-            let nary: Nary
-            switch value {
-            case "+":
-                nary = .plus
-
-            case "-":
-                nary = .minus
-
-            case "not":
-                nary = .not
-
-            case "==":
-                nary = .equals
-
-            case "atLabel":
-                nary = .atLabel
-
-            case "DictAdd":
-                nary = .dictAdd
-
-            default:
-                fatalError(value)
-            }
-
-            let arity = try values.decode(Int.self, forKey: .arity)
-            assert(nary.arity == arity)
-            self = .nary(nary)
-
-        case "StoreVar":
-            let value = try values.decode(String.self, forKey: .value)
-            self = .storeVar(value)
-
-        case "Return":
-            self = .ret
-
-        case "Push":
-            let value = try values.decode(Value.self, forKey: .value)
-            self = .push(value)
-
-        case "Apply":
-            self = .apply
-
-        case "Pop":
-            self = .pop
-
-        case "Load":
-            if values.contains(.value) {
-                let values = try values.decode([Value].self, forKey: .value)
-                self = .load(.address(values))
-            } else {
-                self = .load(nil)
-            }
-
-        case "Sequential":
-            self = .sequential
-
-        case "Store":
-            if values.contains(.value) {
-                let values = try values.decode([Value].self, forKey: .value)
-                self = .store(.address(values))
-            } else {
-                self = .store(nil)
-            }
-
-        case "Choose":
-            self = .choose
-
-        case "JumpCond":
-            let pc = Int(try values.decode(String.self, forKey: .pc))!
-            let cond = try values.decode(Value.self, forKey: .cond)
-            self = .jumpCond(pc: pc, cond: cond)
-
-        case "Address":
-            self = .address
-
-        case "AtomicInc":
-            let lazy = try values.decode(String.self, forKey: .lazy)
-            assert(lazy == "True" || lazy == "False")
-            self = .atomicInc(lazy: lazy == "True")
-
-        case "AtomicDec":
-            self = .atomicDec
-
-        case "ReadonlyInc":
-            self = .readonlyInc
-
-        case "ReadonlyDec":
-            self = .readonlyDec
-
-        case "Assert":
-            self = .assertOp
-
-        case "Spawn":
-            let eternal = try values.decode(String.self, forKey: .eternal)
-            assert(eternal == "True" || eternal == "False")
-            self = .spawn(eternal: eternal == "True")
-
-        default:
-            fatalError(op)
-        }
-    }
-
-}
-
-protocol OpVisitor {
-
-    mutating func frame(name: String, params: [String]) throws
-    mutating func push(_ value: Value) throws
-    mutating func sequential() throws
-    mutating func choose() throws
-    mutating func store(_ value: Value?) throws
-    mutating func storeVar(_ varName: String) throws
-    mutating func jump(pc: Int) throws
-    mutating func jumpCond(pc: Int, cond: Value) throws
-    mutating func loadVar(_ varName: String) throws
-    mutating func load(_ value: Value?) throws
-    mutating func address() throws
-    mutating func nary(_ nary: Nary) throws
-    mutating func atomicInc(lazy: Bool) throws
-    mutating func atomicDec() throws
-    mutating func readonlyInc() throws
-    mutating func readonlyDec() throws
-    mutating func assertOp() throws
-    mutating func delVar(_ varName: String) throws
-    mutating func ret() throws
-    mutating func spawn(eternal: Bool) throws
-    mutating func apply() throws
-    mutating func pop() throws
-
-}
-
-extension Op {
-
-    func accept<T: OpVisitor>(_ visitor: inout T) throws {
-        switch self {
-        case .frame(name: let name, params: let params):
-            try visitor.frame(name: name, params: params)
-        case .push(let value):
-            try visitor.push(value)
-        case .sequential:
-            try visitor.sequential()
-        case .choose:
-            try visitor.choose()
-        case .store(let value):
-            try visitor.store(value)
-        case .storeVar(let varName):
-            try visitor.storeVar(varName)
-        case .jump(pc: let pc):
-            try visitor.jump(pc: pc)
-        case .jumpCond(pc: let pc, cond: let cond):
-            try visitor.jumpCond(pc: pc, cond: cond)
-        case .loadVar(let varName):
-            try visitor.loadVar(varName)
-        case .load(let value):
-            try visitor.load(value)
-        case .address:
-            try visitor.address()
-        case .nary(let nary):
-            try visitor.nary(nary)
-        case .atomicInc(lazy: let lazy):
-            try visitor.atomicInc(lazy: lazy)
-        case .atomicDec:
-            try visitor.atomicDec()
-        case .readonlyInc:
-            try visitor.readonlyInc()
-        case .readonlyDec:
-            try visitor.readonlyDec()
-        case .assertOp:
-            try visitor.assertOp()
-        case .delVar(let varName):
-            try visitor.delVar(varName)
-        case .ret:
-            try visitor.ret()
-        case .spawn(eternal: let eternal):
-            try visitor.spawn(eternal: eternal)
-        case .apply:
-            try visitor.apply()
-        case .pop:
-            try visitor.pop()
-        }
-    }
+    case cut(setName: String, varTree: VarTree)
+    case incVar(varName: String)
+    case dup
 
 }
 
 enum OpImpl {
 
-    static func frame(context: inout Context, name: String, params: [String]) throws {
+    private static func matchVarTree(varTree: VarTree, value: Value, vars: inout Dict) throws {
+        switch varTree {
+        case .name("_"):
+            break
+        case .name(let name):
+            vars[.atom(name)] = value
+        case .tuple(let elems):
+            guard case let .dict(d) = value else {
+                throw OpError.typeMismatch(expected: [.dict], actual: [value.type])
+            }
+
+            assert(d.count == elems.count)
+
+            for (elem, (_, value)) in zip(elems, d) {
+                try matchVarTree(varTree: elem, value: value, vars: &vars)
+            }
+        }
+    }
+
+    static func frame(context: inout Context, name: String, params: VarTree) throws {
         guard let args = context.stack.last else {
             throw OpError.stackIsEmpty
         }
@@ -438,19 +86,7 @@ enum OpImpl {
         context.stack.append(.int(context.fp))
 
         context.vars = Dict()
-        switch args {
-        case let .dict(args):
-            // match args with params
-            assert(args.count == params.count)
-            for i in 0..<params.count {
-                context.vars[.atom(params[i])] = args.elements[i].value
-            }
-
-        default:
-            assert(params.count == 1)
-            context.vars[.atom(params[0])] = args
-
-        }
+        try matchVarTree(varTree: params, value: args, vars: &context.vars)
 
         context.fp = context.stack.count
         context.pc += 1
@@ -460,18 +96,49 @@ enum OpImpl {
         context.pc = pc
     }
 
-    static func delVar(context: inout Context, _ varName: String) throws {
-        context.vars[.atom(varName)] = nil
+    static func delVar(context: inout Context, varName: String?) throws {
+        if let varName = varName {
+            context.vars[.atom(varName)] = nil
+
+        } else {
+            guard case let .address(indexPath) = context.stack.popLast() else {
+                throw OpError.stackTypeMismatch(expected: .address)
+            }
+
+            guard let result = context.vars.replacing(valueAt: indexPath, with: nil) else {
+                throw OpError.invalidAddress(address: .address(indexPath))
+            }
+
+            context.vars = result
+        }
+
+        context.pc += 1
+
+    }
+
+    static func loadVar(context: inout Context, varName: String?) throws {
+        if let varName = varName {
+            guard let value = context.vars[.atom(varName)] else {
+                throw OpError.unknownVar(varName: varName)
+            }
+            context.stack.append(value)
+
+        } else {
+            guard case let .address(indexPath) = context.stack.popLast() else {
+                throw OpError.stackTypeMismatch(expected: .address)
+            }
+
+            guard let value = context.vars.value(at: indexPath) else {
+                throw OpError.invalidAddress(address: .address(indexPath))
+            }
+
+            context.stack.append(value)
+        }
+
         context.pc += 1
     }
 
-    static func loadVar(context: inout Context, _ varName: String) throws {
-        let value = context.vars[.atom(varName)]!
-        context.stack.append(value)
-        context.pc += 1
-    }
-
-    static func nary(context: inout Context, _ n: Nary) throws {
+    static func nary(context: inout Context, nary n: Nary) throws {
         switch n {
         case .plus:
             try NaryImpl.plus(context: &context)
@@ -488,26 +155,58 @@ enum OpImpl {
         case .equals:
             try NaryImpl.equals(context: &context)
 
+        case .range:
+            try NaryImpl.range(context: &context)
+
+        case .isEmpty:
+            try NaryImpl.isEmpty(context: &context)
+
+        case .len:
+            try NaryImpl.len(context: &context)
+
+        case .times(arity: let arity):
+            try NaryImpl.times(context: &context, arity: arity)
+
+        case .mod:
+            try NaryImpl.mod(context: &context)
+
         default:
-            throw OpError.unimplemented
+            throw OpError.unimplemented("Nary \(n)")
         }
 
         context.pc += 1
     }
 
-    static func nary(context: inout Context, contextBag: Bag<Context>, _ n: Nary) throws {
+    static func nary(context: inout Context, contextBag: Bag<Context>, nary n: Nary) throws {
         switch n {
         case .atLabel:
             try NaryImpl.atLabel(context: &context, contextBag: contextBag)
 
         default:
-            try nary(context: &context, n)
+            try nary(context: &context, nary: n)
         }
     }
 
-    static func storeVar(context: inout Context, _ varName: String) throws {
-        let value = context.stack.popLast()!
-        context.vars[.atom(varName)] = value
+    static func storeVar(context: inout Context, varTree: VarTree?) throws {
+        guard let value = context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
+
+        if let varTree = varTree {
+            try matchVarTree(varTree: varTree, value: value, vars: &context.vars)
+
+        } else {
+            guard case let .address(indexPath) = context.stack.popLast() else {
+                throw OpError.stackTypeMismatch(expected: .address)
+            }
+
+            guard let result = context.vars.replacing(valueAt: indexPath, with: value) else {
+                throw OpError.invalidAddress(address: .address(indexPath))
+            }
+
+            context.vars = result
+        }
+
         context.pc += 1
     }
 
@@ -553,7 +252,7 @@ enum OpImpl {
         }
     }
 
-    static func push(context: inout Context, _ value: Value) throws {
+    static func push(context: inout Context, value: Value) throws {
         context.stack.append(value)
         context.pc += 1
     }
@@ -600,24 +299,20 @@ enum OpImpl {
     static func load(
         context: inout Context,
         vars: inout Dict,
-        _ addressOrNil: Value?
+        address: Value?
     ) throws {
-        let addresses: [Value]
-        if case let .address(addrs) = addressOrNil {
-            addresses = addrs
+        let indexPath: [Value]
+        if case let .address(addrs) = address {
+            indexPath = addrs
         } else if case let .address(addrs) = context.stack.popLast()! {
-            addresses = addrs
+            indexPath = addrs
         } else {
             fatalError()
         }
 
-        var dict = vars
-        for address in addresses[..<(addresses.count - 1)] {
-            guard case let .dict(d) = dict[address] else { fatalError() }
-            dict = d
+        guard let result = vars.value(at: indexPath) else {
+            throw OpError.invalidAddress(address: .address(indexPath))
         }
-
-        let result = dict[addresses.last!]!
         context.stack.append(result)
 
         context.pc += 1
@@ -626,13 +321,13 @@ enum OpImpl {
     static func store(
         context: inout Context,
         vars: inout Dict,
-        _ addressOrNil: Value?
+        address: Value?
     ) throws {
         if context.isReadonly { throw OpError.contextIsReadonly }
         guard let value = context.stack.popLast() else { throw OpError.stackIsEmpty }
 
         let indexPath: [Value]
-        if case let .address(addrs) = addressOrNil {
+        if case let .address(addrs) = address {
             indexPath = addrs
         } else if case let .address(addrs) = context.stack.popLast()! {
             indexPath = addrs
@@ -660,6 +355,7 @@ enum OpImpl {
 
         case let .pc(pc):
             context.stack.append(.pc(context.pc + 1))
+            context.stack.append(.int(Calltype.normal.rawValue))
             context.stack.append(args)
             context.pc = pc
 
@@ -725,12 +421,45 @@ enum OpImpl {
         )
     }
 
+    static func cut(context: inout Context, setName: String, varTree: VarTree) throws {
+        guard case var .set(set) = context.vars[.atom(setName)] else {
+            throw OpError.varTypeMismatch(varName: setName, expected: .set)
+        }
+
+        guard let min = set.min() else {
+            throw OpError.setIsEmpty
+        }
+
+        set.remove(min)
+        context.vars[.atom(setName)] = .set(set)
+        try matchVarTree(varTree: varTree, value: min, vars: &context.vars)
+
+        context.pc += 1
+    }
+
+    static func incVar(context: inout Context, varName: String) throws {
+        guard case let .int(i) = context.vars[.atom(varName)] else {
+            throw OpError.varTypeMismatch(varName: varName, expected: .int)
+        }
+
+        context.vars[.atom(varName)] = .int(i + 1)
+    }
+
+    static func dup(context: inout Context) throws {
+        guard let value = context.stack.last else {
+            throw OpError.stackIsEmpty
+        }
+
+        context.stack.append(value)
+    }
+
 }
 
 private extension Dict {
 
-    func replacing(valueAt indexPath: [Value], with value: Value) -> Dict? {
+    func replacing(valueAt indexPath: [Value], with value: Value?) -> Dict? {
         assert(!indexPath.isEmpty)
+
         if indexPath.count == 1 {
             var copy = self
             copy[indexPath[0]] = value
@@ -745,86 +474,21 @@ private extension Dict {
         }
     }
 
-}
+    func value(at indexPath: [Value]) -> Value? {
+        var dict = self
+        for address in indexPath[..<(indexPath.count - 1)] {
+            guard case let .dict(d) = dict[address] else {
+                return nil
+            }
 
-protocol DeterministicContextOpVisitor: OpVisitor {
+            dict = d
+        }
 
-    var context: Context { get set }
+        guard let last = indexPath.last else {
+            return nil
+        }
 
-}
-
-extension DeterministicContextOpVisitor {
-
-    mutating func frame(name: String, params: [String]) throws {
-        try OpImpl.frame(context: &context, name: name, params: params)
-    }
-
-    mutating func jump(pc: Int) throws {
-        try OpImpl.jump(context: &context, pc: pc)
-    }
-
-    mutating func delVar(_ varName: String) throws {
-        try OpImpl.delVar(context: &context, varName)
-    }
-
-    mutating func loadVar(_ varName: String) throws {
-        try OpImpl.loadVar(context: &context, varName)
-    }
-
-    mutating func nary(_ nary: Nary) throws {
-        try OpImpl.nary(context: &context, nary)
-    }
-
-    mutating func storeVar(_ varName: String) throws {
-        try OpImpl.storeVar(context: &context, varName)
-    }
-
-    mutating func ret() throws {
-        try OpImpl.ret(context: &context)
-    }
-
-    mutating func push(_ value: Value) throws {
-        try OpImpl.push(context: &context, value)
-    }
-
-    mutating func pop() throws {
-        try OpImpl.pop(context: &context)
-    }
-
-    mutating func jumpCond(pc: Int, cond: Value) throws {
-        try OpImpl.jumpCond(context: &context, pc: pc, cond: cond)
-    }
-
-    mutating func address() throws {
-        try OpImpl.address(context: &context)
-    }
-
-    mutating func sequential() throws {
-        try OpImpl.sequential(context: &context)
-    }
-
-    mutating func apply() throws {
-        try OpImpl.apply(context: &context)
-    }
-
-    mutating func readonlyInc() throws {
-        try OpImpl.readonlyInc(context: &context)
-    }
-
-    mutating func readonlyDec() throws {
-        try OpImpl.readonlyDec(context: &context)
-    }
-
-    mutating func atomicInc(lazy: Bool) throws {
-        try OpImpl.atomicInc(context: &context, lazy: lazy)
-    }
-
-    mutating func atomicDec() throws {
-        try OpImpl.atomicDec(context: &context)
-    }
-
-    mutating func assertOp() throws {
-        try OpImpl.assertOp(context: &context)
+        return dict[last]
     }
 
 }

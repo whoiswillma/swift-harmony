@@ -43,17 +43,29 @@ private struct InterpreterOpVisitor: DeterministicContextOpVisitor {
         self.interpreter = interpreter
     }
 
+    mutating func atomicInc(lazy: Bool) throws {
+        try OpImpl.atomicInc(context: &context, lazy: lazy)
+    }
+
+    mutating func atomicDec() throws {
+        try OpImpl.atomicDec(context: &context)
+
+        if !context.isAtomic {
+            throw InterpreterInterrupt.switchPoint
+        }
+    }
+
     mutating func choose() throws {
         try OpImpl.choose(context: &context, nondeterminism: interpreter.nondeterminism)
     }
 
-    mutating func store(_ addressOrNil: Value?) throws {
-        try OpImpl.store(context: &context, vars: &interpreter.vars, addressOrNil)
+    mutating func store(address: Value?) throws {
+        try OpImpl.store(context: &context, vars: &interpreter.vars, address: address)
         throw InterpreterInterrupt.switchPoint
     }
 
-    mutating func load(_ addressOrNil: Value?) throws {
-        try OpImpl.load(context: &context, vars: &interpreter.vars, addressOrNil)
+    mutating func load(address: Value?) throws {
+        try OpImpl.load(context: &context, vars: &interpreter.vars, address: address)
         throw InterpreterInterrupt.switchPoint
     }
 
@@ -64,7 +76,7 @@ private struct InterpreterOpVisitor: DeterministicContextOpVisitor {
     }
 
     mutating func nary(_ nary: Nary) throws {
-        try OpImpl.nary(context: &context, contextBag: interpreter.contextBag, nary)
+        try OpImpl.nary(context: &context, contextBag: interpreter.contextBag, nary: nary)
     }
 
 }
@@ -105,25 +117,20 @@ private class Interpreter {
 
     func step() throws {
         let runnable = getRunnable()
-        let index: Int
-        if runnable.count == 1 {
-            index = 0
-        } else {
-            index = nondeterminism.chooseContext(runnable)
-        }
-        var context = runnable[index]
+        let index = nondeterminism.chooseContext(runnable)
+        let context = runnable[index]
 
         var visitor = InterpreterOpVisitor(context: context, interpreter: self)
         do {
+            var firstInstruction = true
             while !visitor.context.terminated {
                 do {
                     print(visitor.context.name, code[visitor.context.pc], visitor.context.stack)
-                    if !visitor.context.isAtomic, case .atomicInc = code[visitor.context.pc] {
-                        contextBag.remove(context)
-                        contextBag.add(visitor.context)
-                        context = visitor.context
+                    if firstInstruction, !visitor.context.isAtomic, case .atomicInc = code[visitor.context.pc] {
+                        throw InterpreterInterrupt.switchPoint
                     }
                     try code[visitor.context.pc].accept(&visitor)
+                    firstInstruction = false
                 } catch InterpreterInterrupt.spawn(let context) {
                     self.contextBag.add(context)
                 }
@@ -144,7 +151,7 @@ struct HVM: Decodable {
     let code: [Op]
 }
 
-let url = URL(fileURLWithPath: "/Users/williamma/Documents/sharm/Peterson.hvm")
+let url = URL(fileURLWithPath: "/Users/williamma/Documents/sharm/Diners.hvm")
 let hvmData = try Data(contentsOf: url)
 let hvm = try JSONDecoder().decode(HVM.self, from: hvmData)
 
