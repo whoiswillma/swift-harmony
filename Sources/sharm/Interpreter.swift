@@ -116,7 +116,8 @@ class Interpreter {
             var firstInstruction = true
             while !visitor.context.terminated {
                 do {
-                    print(visitor.context.name, code[visitor.context.pc], visitor.context.stack)
+                    logger.trace("\(visitor.context.name), \(code[visitor.context.pc]), \(visitor.context.stack)")
+
                     if firstInstruction, !visitor.context.isAtomic, case .atomicInc = code[visitor.context.pc] {
                         throw InterpreterInterrupt.switchPoint
                     }
