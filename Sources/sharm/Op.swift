@@ -22,6 +22,7 @@ enum OpError: Error {
     case varTypeMismatch(varName: String, expected: ValueType)
     case invalidCalltype(Int)
     case setIsEmpty
+    case invalidKey(key: Value)
 
 }
 
@@ -61,8 +62,10 @@ enum OpImpl {
         switch varTree {
         case .name("_"):
             break
+
         case .name(let name):
             vars[.atom(name)] = value
+
         case .tuple(let elems):
             guard case let .dict(d) = value else {
                 throw OpError.typeMismatch(expected: [.dict], actual: [value.type])
@@ -105,15 +108,10 @@ enum OpImpl {
                 throw OpError.stackTypeMismatch(expected: .address)
             }
 
-            guard let result = context.vars.replacing(valueAt: indexPath, with: nil) else {
-                throw OpError.invalidAddress(address: .address(indexPath))
-            }
-
-            context.vars = result
+            try context.vars.replace(valueAt: indexPath, with: nil)
         }
 
         context.pc += 1
-
     }
 
     static func loadVar(context: inout Context, varName: String?) throws {
@@ -200,11 +198,7 @@ enum OpImpl {
                 throw OpError.stackTypeMismatch(expected: .address)
             }
 
-            guard let result = context.vars.replacing(valueAt: indexPath, with: value) else {
-                throw OpError.invalidAddress(address: .address(indexPath))
-            }
-
-            context.vars = result
+            try context.vars.replace(valueAt: indexPath, with: value)
         }
 
         context.pc += 1
@@ -224,7 +218,9 @@ enum OpImpl {
         context.vars = originalVars
 
         // pop call arguments
-        _ = context.stack.popLast()!
+        guard nil != context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
 
         if context.stack.isEmpty {
             context.terminated = true
@@ -234,6 +230,7 @@ enum OpImpl {
         guard case let .int(calltype) = context.stack.popLast() else {
             throw OpError.stackTypeMismatch(expected: .int)
         }
+
         guard let calltype = Calltype(rawValue: calltype) else {
             throw OpError.invalidCalltype(calltype)
         }
@@ -243,6 +240,7 @@ enum OpImpl {
             guard case let .pc(returnPc) = context.stack.popLast() else {
                 throw OpError.stackTypeMismatch(expected: .pc)
             }
+
             context.pc = returnPc
 
             context.stack.append(result)
@@ -258,12 +256,18 @@ enum OpImpl {
     }
 
     static func pop(context: inout Context) throws {
-        _ = context.stack.popLast()!
+        guard nil != context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
+
         context.pc += 1
     }
 
     static func jumpCond(context: inout Context, pc: Int, cond: Value) throws {
-        let test = context.stack.popLast()!
+        guard let test = context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
+
         if test == cond {
             context.pc = pc
         } else {
@@ -272,10 +276,14 @@ enum OpImpl {
     }
 
     static func address(context: inout Context) throws {
-        let value = context.stack.popLast()!
+        guard let value = context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
+
         guard case var .address(values) = context.stack.popLast() else {
             throw OpError.stackTypeMismatch(expected: .address)
         }
+
         values.append(value)
         context.stack.append(.address(values))
         context.pc += 1
@@ -285,11 +293,14 @@ enum OpImpl {
         guard case .address = context.stack.popLast() else {
             throw OpError.stackTypeMismatch(expected: .address)
         }
+
         context.pc += 1
     }
 
     static func choose(context: inout Context, nondeterminism: Nondeterminism) throws {
-        guard case let .set(value) = context.stack.popLast()! else { fatalError() }
+        guard case let .set(value) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .set)
+        }
         let chosen = value.elements[nondeterminism.chooseIndex(value)]
         context.stack.append(chosen)
 
@@ -302,12 +313,15 @@ enum OpImpl {
         address: Value?
     ) throws {
         let indexPath: [Value]
+
         if case let .address(addrs) = address {
             indexPath = addrs
-        } else if case let .address(addrs) = context.stack.popLast()! {
-            indexPath = addrs
         } else {
-            fatalError()
+            guard case let .address(addrs) = context.stack.popLast() else {
+                throw OpError.stackTypeMismatch(expected: .address)
+            }
+
+            indexPath = addrs
         }
 
         guard let result = vars.value(at: indexPath) else {
@@ -327,30 +341,36 @@ enum OpImpl {
         guard let value = context.stack.popLast() else { throw OpError.stackIsEmpty }
 
         let indexPath: [Value]
+
         if case let .address(addrs) = address {
             indexPath = addrs
-        } else if case let .address(addrs) = context.stack.popLast()! {
-            indexPath = addrs
         } else {
-            fatalError()
+            guard case let .address(addrs) = context.stack.popLast() else {
+                throw OpError.stackTypeMismatch(expected: .address)
+            }
+
+            indexPath = addrs
         }
 
-        guard let result = vars.replacing(valueAt: indexPath, with: value) else {
-            throw OpError.invalidAddress(address: .address(indexPath))
-        }
-
-        vars = result
+        try vars.replace(valueAt: indexPath, with: value)
 
         context.pc += 1
     }
 
     static func apply(context: inout Context) throws {
-        let args = context.stack.popLast()!
-        let f = context.stack.popLast()!
+        guard let args = context.stack.popLast(),
+              let f = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
 
         switch f {
         case let .dict(dict):
-            context.stack.append(dict[args]!)
+            guard let result = dict[args] else {
+                throw OpError.invalidKey(key: args)
+            }
+
+            context.stack.append(result)
             context.pc += 1
 
         case let .pc(pc):
@@ -360,7 +380,7 @@ enum OpImpl {
             context.pc = pc
 
         default:
-            fatalError()
+            throw OpError.typeMismatch(expected: [.dict, .pc], actual: [f.type])
         }
     }
 
@@ -413,6 +433,7 @@ enum OpImpl {
         }
 
         parent.pc += 1
+
         return Context(
             name: name,
             entry: pc,
@@ -469,13 +490,33 @@ private extension Dict {
             guard case let .dict(dict) = elements[index].value else { return nil }
             guard let result = dict.replacing(valueAt: Array(indexPath[1...]), with: value) else { return nil }
             var copy = self
-            copy[indexPath[0]] = .dict(result)
+            copy.values[index] = .dict(result)
             return copy
+        }
+    }
+
+    mutating func replace(valueAt indexPath: [Value], with value: Value?) throws {
+        assert(!indexPath.isEmpty)
+
+        if indexPath.count == 1 {
+            self[indexPath[0]] = value
+        } else {
+            guard let index = index(forKey: indexPath[0]) else {
+                throw OpError.invalidKey(key: indexPath[0])
+            }
+            guard case var .dict(dict) = values[index] else {
+                throw OpError.typeMismatch(expected: [.dict], actual: [values[index].type])
+            }
+
+            try dict.replace(valueAt: Array(indexPath[1...]), with: value)
+
+            values[index] = .dict(dict)
         }
     }
 
     func value(at indexPath: [Value]) -> Value? {
         var dict = self
+
         for address in indexPath[..<(indexPath.count - 1)] {
             guard case let .dict(d) = dict[address] else {
                 return nil
