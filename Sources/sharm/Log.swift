@@ -8,4 +8,4 @@
 import Logging
 import Foundation
 
-let logger = Logger(label: "sharm")
+var logger = Logger(label: "sharm")

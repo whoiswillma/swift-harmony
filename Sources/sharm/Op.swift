@@ -168,6 +168,9 @@ enum OpImpl {
         case .mod:
             try NaryImpl.mod(context: &context)
 
+        case .notEquals:
+            try NaryImpl.notEquals(context: &context)
+
         default:
             throw OpError.unimplemented("Nary \(n)")
         }
@@ -297,11 +300,12 @@ enum OpImpl {
         context.pc += 1
     }
 
-    static func choose(context: inout Context, nondeterminism: Nondeterminism) throws {
+    static func choose(context: inout Context, chooseFn: (Set) throws -> Int) throws {
         guard case let .set(value) = context.stack.popLast() else {
             throw OpError.stackTypeMismatch(expected: .set)
         }
-        let chosen = value.elements[nondeterminism.chooseIndex(value)]
+        
+        let chosen = value.elements[try chooseFn(value)]
         context.stack.append(chosen)
 
         context.pc += 1

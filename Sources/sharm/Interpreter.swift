@@ -10,7 +10,6 @@ import Foundation
 private enum InterpreterInterrupt: Error {
     case switchPoint
     case spawn(Context)
-    case updateContextBag
 }
 
 private struct InterpreterOpVisitor: DeterministicContextOpVisitor {
@@ -36,7 +35,7 @@ private struct InterpreterOpVisitor: DeterministicContextOpVisitor {
     }
 
     mutating func choose() throws {
-        try OpImpl.choose(context: &context, nondeterminism: interpreter.nondeterminism)
+        try OpImpl.choose(context: &context, chooseFn: interpreter.nondeterminism.chooseIndex)
     }
 
     mutating func store(address: Value?) throws {
@@ -84,10 +83,9 @@ class Interpreter {
 
     init(code: [Op], nondeterminism: Nondeterminism) {
         self.code = code
-        let initContext = Context(name: "__init__", entry: 0, arg: .dict([:]), stack: [.dict([:])])
         self.nondeterminism = nondeterminism
         self.vars = Dict()
-        self.contextBag = Bag([initContext])
+        self.contextBag = Bag([.initContext])
     }
 
     private func getRunnable() -> [Context] {

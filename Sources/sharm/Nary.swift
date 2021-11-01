@@ -314,4 +314,14 @@ enum NaryImpl {
         context.stack.append(result)
     }
 
+    static func notEquals(context: inout Context) throws {
+        guard let rhs = context.stack.popLast(),
+              let lhs = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        context.stack.append(.bool(lhs != rhs))
+    }
+
 }

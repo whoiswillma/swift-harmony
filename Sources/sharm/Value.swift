@@ -85,17 +85,6 @@ struct Context: Hashable {
 
 }
 
-extension Context: CustomStringConvertible {
-
-    var description: String {
-        return "Context(pc=\(pc),fp=\(fp),at=\(atomicLevel),rd=\(readonlyLevel),tm=\(terminated)\n"
-            + "\tvars=\(vars)\n"
-            + "\tstack=\(stack)\n"
-            + ")"
-    }
-
-}
-
 extension Context: Comparable {
 
     static func < (lhs: Context, rhs: Context) -> Bool {
@@ -110,6 +99,12 @@ extension Context: Comparable {
         && lhs.readonlyLevel < rhs.readonlyLevel
         && lhs.terminated < rhs.terminated
     }
+
+}
+
+extension Context {
+
+    static let initContext = Context(name: "__init__", entry: 0, arg: .dict([:]), stack: [.dict([:])])
 
 }
 

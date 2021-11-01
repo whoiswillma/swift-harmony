@@ -96,3 +96,11 @@ struct Bag<T: Hashable> {
     }
 
 }
+
+extension Bag: Equatable where T: Equatable {
+
+}
+
+extension Bag: Hashable where T: Hashable {
+    
+}
