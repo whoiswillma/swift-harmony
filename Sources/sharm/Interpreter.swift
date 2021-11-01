@@ -98,6 +98,12 @@ class Interpreter {
         }
     }
 
+    func run() throws {
+        while !allTerminated {
+            try step()
+        }
+    }
+
     func step() throws {
         let runnable = getRunnable()
 

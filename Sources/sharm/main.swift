@@ -1,34 +1,101 @@
-#!/usr/bin/env swift
-
+import ArgumentParser
 import Foundation
-import OrderedCollections
 
-logger.logLevel = .trace
-
-struct HVM: Decodable {
-    let code: [Op]
+enum LogLevel: String, ExpressibleByArgument {
+    case trace
 }
 
-let url = URL(fileURLWithPath: "/Users/williamma/Documents/sharm/paths.hvm")
-let hvmData = try Data(contentsOf: url)
-let hvm = try JSONDecoder().decode(HVM.self, from: hvmData)
+struct Sharm: ParsableCommand {
 
-let modelChecker = StatefulModelChecker(code: hvm.code)
-try modelChecker.run()
+    static var configuration = CommandConfiguration(
+        subcommands: [Interp.self, SMC.self],
+        defaultSubcommand: Interp.self
+    )
 
-//let nondeterminism = BookkeepingNondeterminism()
-//defer {
-//    print("History")
-//    for elem in nondeterminism.history {
-//        switch elem {
-//        case .index(let i, let s): print("\tChose \(i) out of \(s)")
-//        case .context(let i, let s): print("\tChose \(i) out of \(s)")
-//        }
-//    }
-//}
-//
-//private let interpreter = Interpreter(code: hvm.code, nondeterminism: nondeterminism)
-//
-//while !interpreter.allTerminated {
-//    try interpreter.step()
-//}
+    enum Action: String, ExpressibleByArgument {
+        case interpret
+        case smc
+    }
+
+}
+
+struct Options: ParsableCommand {
+
+    @Option
+    var logLevel: LogLevel?
+
+    @Argument
+    var hvmPath: String = ""
+
+    func setLoggerLevel() {
+        switch logLevel {
+        case .trace: logger.logLevel = .trace
+        case nil: break
+        }
+    }
+
+    func readCodeFromHvmPath() throws -> [Op] {
+        struct HVMFile: Decodable {
+            let code: [Op]
+        }
+
+        let url = URL(fileURLWithPath: hvmPath)
+        let hvmData = try Data(contentsOf: url)
+        let hvmFile = try JSONDecoder().decode(HVMFile.self, from: hvmData)
+        return hvmFile.code
+    }
+
+}
+
+extension Sharm {
+
+    struct Interp: ParsableCommand {
+
+        @Flag
+        var printHistory: Bool = false
+
+        @OptionGroup
+        var options: Options
+
+        func run() throws {
+            options.setLoggerLevel()
+
+            let code = try options.readCodeFromHvmPath()
+            let nondeterminism = BookkeepingNondeterminism()
+            let interpreter = Interpreter(code: code, nondeterminism: nondeterminism)
+
+            do {
+                try interpreter.run()
+            } catch {
+                print("History")
+                for elem in nondeterminism.history {
+                    switch elem {
+                    case .index(let i, let s): print("\tChose \(i) out of \(s)")
+                    case .context(let i, let s): print("\tChose \(i) out of \(s)")
+                    }
+                }
+
+                throw error
+            }
+        }
+
+    }
+
+    struct SMC: ParsableCommand {
+
+        @OptionGroup
+        var options: Options
+
+        func run() throws {
+            options.setLoggerLevel()
+
+            let code = try options.readCodeFromHvmPath()
+            let modelChecker = StatefulModelChecker(code: code)
+            try modelChecker.run()
+        }
+
+    }
+
+}
+
+Sharm.main()

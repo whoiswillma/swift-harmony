@@ -104,9 +104,9 @@ class StatefulModelChecker {
 
     func run() throws {
         var visited: Swift.Set<State> = []
-        var stack: [State] = [.initialState]
+        var boundary: Swift.Set<State> = [.initialState]
 
-        while var state = stack.popLast() {
+        while var state = boundary.popFirst() {
             if visited.contains(state) {
                 continue
             }
@@ -133,7 +133,7 @@ class StatefulModelChecker {
                         var newState = state
                         newState.contextBag.add(context)
                         newState.nextContextToRun = context
-                        stack.append(newState)
+                        boundary.insert(newState)
                     }
 
                 case .switchPoint(let op):
@@ -143,7 +143,6 @@ class StatefulModelChecker {
 
                     case .spawn(eternal: let eternal):
                         let child = try OpImpl.spawn(parent: &visitor.context, name: "", eternal: eternal)
-                        state.spawnCounter += 1
                         state.contextBag.add(child)
 
                     case .load(address: let address):
@@ -162,7 +161,7 @@ class StatefulModelChecker {
                     for context in state.runnable {
                         var newState = state
                         newState.nextContextToRun = context
-                        stack.append(newState)
+                        boundary.insert(newState)
                     }
                 }
             }
