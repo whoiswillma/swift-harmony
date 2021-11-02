@@ -51,10 +51,12 @@ class StatefulModelChecker {
     struct Visitor: DeterministicContextOpVisitor {
 
         var context: Context
+        var contextBag: Bag<Context>
         let modelChecker: StatefulModelChecker
 
-        init(context: Context, modelChecker: StatefulModelChecker) {
+        init(context: Context, contextBag: Bag<Context>, modelChecker: StatefulModelChecker) {
             self.context = context
+            self.contextBag = contextBag
             self.modelChecker = modelChecker
         }
 
@@ -94,6 +96,10 @@ class StatefulModelChecker {
             }
         }
 
+        mutating func nary(nary: Nary) throws {
+            try OpImpl.nary(context: &context, contextBag: contextBag, nary: nary)
+        }
+
     }
 
     let code: [Op]
@@ -113,7 +119,11 @@ class StatefulModelChecker {
 
             visited.insert(state)
             assert(state.contextBag.contains(state.nextContextToRun))
-            var visitor = Visitor(context: state.nextContextToRun, modelChecker: self)
+            var visitor = Visitor(
+                context: state.nextContextToRun,
+                contextBag: state.contextBag,
+                modelChecker: self
+            )
 
             logger.trace("Context switch to \(visitor.context.name)")
             do {
