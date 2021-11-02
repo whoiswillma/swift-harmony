@@ -264,6 +264,50 @@ extension Value: Decodable {
 
 }
 
+extension Value: Encodable {
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+
+        switch self {
+        case .atom(let value):
+            try values.encode("atom", forKey: .type)
+            try values.encode(value, forKey: .value)
+
+        case .bool(let value):
+            try values.encode("bool", forKey: .type)
+            try values.encode(value ? "True" : "False", forKey: .value)
+
+        case .int(let value):
+            try values.encode("int", forKey: .type)
+            try values.encode(value.description, forKey: .value)
+
+        case .dict(let dict):
+            try values.encode("dict", forKey: .type)
+            let dictEntries: [[String: Value]] = dict.map { key, value in
+                ["key": key, "value": value]
+            }
+            try values.encode(dictEntries, forKey: .value)
+
+        case .address(let indexPath):
+            try values.encode("address", forKey: .type)
+            try values.encode(indexPath, forKey: .value)
+
+        case .pc(let pc):
+            try values.encode("pc", forKey: .type)
+            try values.encode(pc, forKey: .value)
+
+        case .set(let set):
+            try values.encode("set", forKey: .type)
+            try values.encode(set.elements, forKey: .value)
+
+        case .context:
+            fatalError()
+        }
+    }
+
+}
+
 extension Value: CustomStringConvertible {
 
     var description: String {
@@ -276,7 +320,29 @@ extension Value: CustomStringConvertible {
         case .address(let value): return "?\(value.map { "\($0)" }.joined(separator: "."))"
         case .pc(let value): return "PC(\(value))"
         case .set(let value): return "{\(value.map { "\($0)" }.joined(separator: ", "))}"
-        case .context(let context): return "\(context)"
+        case .context: return "Context"
+        }
+    }
+
+}
+
+extension Value: CustomDebugStringConvertible {
+
+    var debugDescription: String {
+        switch self {
+        case .atom(let value): return "Value.atom(\(value.debugDescription))"
+        case .bool(let value): return "Value.bool(\(value))"
+        case .int(let value): return "Value.int(\(value))"
+        case .dict(let value):
+            if value.isEmpty {
+                return "Value.dict([:])"
+            } else {
+                return "Value.dict([\(value.elements.map { "\($0.debugDescription): \($1.debugDescription)" }.joined(separator: ", "))])"
+            }
+        case .address(let indexPath): return "Value.address(\(indexPath))"
+        case .pc(let value): return "Value.pc(\(value))"
+        case .set(let value): return "Value.set(\(value.debugDescription))"
+        case .context: return "Context"
         }
     }
 

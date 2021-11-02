@@ -20,7 +20,7 @@ extension VarTree: CustomStringConvertible {
     var description: String {
         switch self {
         case .name(let name): return name
-        case .tuple(let elems): return "(\(elems.map(\.description).joined(separator: ","))"
+        case .tuple(let elems): return "(\(elems.map(\.description).joined(separator: ",")))"
         }
     }
 
@@ -114,3 +114,13 @@ extension VarTree {
 
 }
 
+extension VarTree: CustomDebugStringConvertible {
+
+    var debugDescription: String {
+        switch self {
+        case .name(let name): return "VarTree.name(\(name.debugDescription))"
+        case .tuple(let tuple): return "VarTree.tuple(\(tuple))"
+        }
+    }
+
+}

@@ -1,4 +1,5 @@
 import ArgumentParser
+import OrderedCollections
 import Foundation
 
 enum LogLevel: String, ExpressibleByArgument {
@@ -8,14 +9,9 @@ enum LogLevel: String, ExpressibleByArgument {
 struct Sharm: ParsableCommand {
 
     static var configuration = CommandConfiguration(
-        subcommands: [Interp.self, SMC.self],
+        subcommands: [Interp.self, SMC.self, Compile.self],
         defaultSubcommand: Interp.self
     )
-
-    enum Action: String, ExpressibleByArgument {
-        case interpret
-        case smc
-    }
 
 }
 
@@ -92,6 +88,21 @@ extension Sharm {
             let code = try options.readCodeFromHvmPath()
             let modelChecker = StatefulModelChecker(code: code)
             try modelChecker.run()
+        }
+
+    }
+
+    struct Compile: ParsableCommand {
+
+        @OptionGroup
+        var options: Options
+
+        func run() throws {
+            options.setLoggerLevel()
+
+            let code = try options.readCodeFromHvmPath()
+            let compiler = H2SCompiler(code: code)
+            try compiler.run()
         }
 
     }

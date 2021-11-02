@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension Op: Decodable {
+extension Op {
 
     enum CodingKeys: String, CodingKey {
         case op
@@ -21,6 +21,10 @@ extension Op: Decodable {
         case cond
         case set
     }
+
+}
+
+extension Op: Decodable {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -176,8 +180,8 @@ extension Op: Decodable {
 
         case "Store":
             if values.contains(.value) {
-                let values = try values.decode([Value].self, forKey: .value)
-                self = .store(address: .address(values))
+                let indexPath = try values.decode([Value].self, forKey: .value)
+                self = .store(address: .address(indexPath))
             } else {
                 self = .store(address: nil)
             }
