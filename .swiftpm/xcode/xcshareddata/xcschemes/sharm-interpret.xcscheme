@@ -52,7 +52,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "interpret"
+            argument = "interp"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
@@ -60,7 +60,7 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "/Users/williamma/sharm/paths.hvm"
+            argument = "/Users/williamma/sharm/Diners.hvm"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

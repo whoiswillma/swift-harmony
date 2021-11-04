@@ -9,7 +9,7 @@ import Foundation
 
 enum OpError: Error {
 
-    case typeMismatch(expected: Swift.Set<ValueType>, actual: [ValueType])
+    case typeMismatch(expected: Set<ValueType>, actual: [ValueType])
     case assertionFailure
     case unimplemented(String?)
     case stackIsEmpty
@@ -39,7 +39,7 @@ enum Op: Hashable {
     case loadVar(varName: String?)
     case load(address: Value?)
     case address
-    case nary(Nary)
+    case nary(nary: Nary)
     case atomicInc(lazy: Bool)
     case atomicDec
     case readonlyInc
@@ -58,7 +58,7 @@ enum Op: Hashable {
 
 enum OpImpl {
 
-    private static func matchVarTree(varTree: VarTree, value: Value, vars: inout Dict) throws {
+    private static func matchVarTree(varTree: VarTree, value: Value, vars: inout HDict) throws {
         switch varTree {
         case .name("_"):
             break
@@ -88,7 +88,7 @@ enum OpImpl {
         context.stack.append(.dict(context.vars))
         context.stack.append(.int(context.fp))
 
-        context.vars = Dict()
+        context.vars = HDict()
         try matchVarTree(varTree: params, value: args, vars: &context.vars)
 
         context.fp = context.stack.count
@@ -230,12 +230,8 @@ enum OpImpl {
             return
         }
 
-        guard case let .int(calltype) = context.stack.popLast() else {
-            throw OpError.stackTypeMismatch(expected: .int)
-        }
-
-        guard let calltype = Calltype(rawValue: calltype) else {
-            throw OpError.invalidCalltype(calltype)
+        guard case let .calltype(calltype) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .calltype)
         }
 
         switch calltype {
@@ -300,7 +296,7 @@ enum OpImpl {
         context.pc += 1
     }
 
-    static func choose(context: inout Context, chooseFn: (Set) throws -> Int) throws {
+    static func choose(context: inout Context, chooseFn: (HSet) throws -> Int) throws {
         guard case let .set(value) = context.stack.popLast() else {
             throw OpError.stackTypeMismatch(expected: .set)
         }
@@ -313,7 +309,7 @@ enum OpImpl {
 
     static func load(
         context: inout Context,
-        vars: inout Dict,
+        vars: inout HDict,
         address: Value?
     ) throws {
         let indexPath: [Value]
@@ -338,7 +334,7 @@ enum OpImpl {
 
     static func store(
         context: inout Context,
-        vars: inout Dict,
+        vars: inout HDict,
         address: Value?
     ) throws {
         if context.isReadonly { throw OpError.contextIsReadonly }
@@ -379,7 +375,7 @@ enum OpImpl {
 
         case let .pc(pc):
             context.stack.append(.pc(context.pc + 1))
-            context.stack.append(.int(Calltype.normal.rawValue))
+            context.stack.append(.calltype(Calltype.normal))
             context.stack.append(args)
             context.pc = pc
 
@@ -442,7 +438,7 @@ enum OpImpl {
             name: name,
             entry: pc,
             arg: arg,
-            stack: [.int(Calltype.process.rawValue), arg]
+            stack: [.calltype(Calltype.process), arg]
         )
     }
 
@@ -480,9 +476,9 @@ enum OpImpl {
 
 }
 
-private extension Dict {
+private extension HDict {
 
-    func replacing(valueAt indexPath: [Value], with value: Value?) -> Dict? {
+    func replacing(valueAt indexPath: [Value], with value: Value?) -> HDict? {
         assert(!indexPath.isEmpty)
 
         if indexPath.count == 1 {

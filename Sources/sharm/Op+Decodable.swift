@@ -144,7 +144,7 @@ extension Op: Decodable {
 
             guard let nary = nary else { fatalError() }
             assert(nary.arity == arity)
-            self = .nary(nary)
+            self = .nary(nary: nary)
 
         case "StoreVar":
             if values.contains(.value) {

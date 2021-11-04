@@ -5,11 +5,10 @@
 //  Created by William Ma on 10/26/21.
 //
 
-import Collections
 
-typealias Dict = OrderedDictionary<Value, Value>
+typealias HDict = OrderedDictionary<Value, Value>
 
-extension Dict: Comparable {
+extension HDict: Comparable {
 
     public static func < (lhs: OrderedDictionary<Key, Value>, rhs: OrderedDictionary<Key, Value>) -> Bool {
         lhs.lexicographicallyPrecedes(rhs) { lhs, rhs in
@@ -23,9 +22,9 @@ extension Dict: Comparable {
 
 }
 
-typealias Set = OrderedSet<Value>
+typealias HSet = OrderedSet<Value>
 
-extension Set: Comparable {
+extension HSet: Comparable {
 
     public static func < (lhs: OrderedSet<Element>, rhs: OrderedSet<Element>) -> Bool {
         lhs.elements.lexicographicallyPrecedes(rhs.elements)
@@ -58,7 +57,7 @@ struct Context: Hashable {
     var stack: [Value]
     var pc: Int
     var fp: Int // unused?
-    var vars: Dict // scoped-storage
+    var vars: HDict // scoped-storage
     var atomicLevel: Int
     var readonlyLevel: Int
 
@@ -78,7 +77,7 @@ struct Context: Hashable {
         self.stack = stack
         self.pc = entry
         self.fp = 0
-        self.vars = Dict()
+        self.vars = HDict()
         self.atomicLevel = 0
         self.readonlyLevel = 0
     }
@@ -104,7 +103,11 @@ extension Context: Comparable {
 
 extension Context {
 
-    static let initContext = Context(name: "__init__", entry: 0, arg: .dict([:]), stack: [.dict([:])])
+    static let initContext: Context = {
+        var initContext = Context(name: "__init__", entry: 0, arg: .dict([:]), stack: [.dict([:])])
+        initContext.atomicLevel = 1
+        return initContext
+    }()
 
 }
 
@@ -124,6 +127,8 @@ enum ValueType: Int, Hashable {
     case pc
     case set
     case context
+    
+    case calltype
 
 }
 
@@ -132,11 +137,12 @@ indirect enum Value: Hashable {
     case atom(String)
     case bool(Bool)
     case int(Int)
-    case dict(Dict)
+    case dict(HDict)
     case address([Value])
     case pc(Int)
-    case set(Set)
+    case set(HSet)
     case context(Context)
+    case calltype(Calltype)
 
     var type: ValueType {
         switch self {
@@ -148,6 +154,7 @@ indirect enum Value: Hashable {
         case .pc: return .pc
         case .set: return .set
         case .context: return .context
+        case .calltype: return .calltype
         }
     }
 
@@ -237,7 +244,7 @@ extension Value: Decodable {
 
         case "dict":
             let dictEntries = try values.decode([[String: Value]].self, forKey: .value)
-            var dict = Dict()
+            var dict = HDict()
             for entry in dictEntries {
                 let key = entry["key"]!
                 let value = entry["value"]!
@@ -254,7 +261,7 @@ extension Value: Decodable {
             self = .pc(value)
 
         case "set":
-            let value = Set(try values.decode([Value].self, forKey: .value))
+            let value = HSet(try values.decode([Value].self, forKey: .value))
             self = .set(value)
 
         default:
@@ -301,7 +308,7 @@ extension Value: Encodable {
             try values.encode("set", forKey: .type)
             try values.encode(set.elements, forKey: .value)
 
-        case .context:
+        case .context, .calltype:
             fatalError()
         }
     }
@@ -321,6 +328,7 @@ extension Value: CustomStringConvertible {
         case .pc(let value): return "PC(\(value))"
         case .set(let value): return "{\(value.map { "\($0)" }.joined(separator: ", "))}"
         case .context: return "Context"
+        case .calltype(let calltype): return "\(calltype)"
         }
     }
 
@@ -342,7 +350,7 @@ extension Value: CustomDebugStringConvertible {
         case .address(let indexPath): return "Value.address(\(indexPath))"
         case .pc(let value): return "Value.pc(\(value))"
         case .set(let value): return "Value.set(\(value.debugDescription))"
-        case .context: return "Context"
+        case .context, .calltype: fatalError()
         }
     }
 

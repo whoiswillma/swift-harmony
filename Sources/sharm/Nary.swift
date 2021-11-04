@@ -141,7 +141,7 @@ enum NaryImpl {
             }
         }
 
-        let value = Value.dict(Dict(uniqueKeysWithValues: result.map({ resultKey, count in
+        let value = Value.dict(HDict(uniqueKeysWithValues: result.map({ resultKey, count in
             (.dict([.int(0): .pc(resultKey.entry), .int(1): resultKey.arg]), .int(count))
         })))
 
@@ -187,7 +187,7 @@ enum NaryImpl {
             throw OpError.stackTypeMismatch(expected: .int)
         }
 
-        let set = Set((lhs...rhs).map { .int($0) })
+        let set = HSet((lhs...rhs).map { .int($0) })
         context.stack.append(.set(set))
     }
 
@@ -256,7 +256,7 @@ enum NaryImpl {
     static func times(context: inout Context, arity: Int) throws {
         assert(arity >= 1)
 
-        var list: Dict?
+        var list: HDict?
         var result: Int = 1
 
         for i in 0..<arity {
@@ -284,7 +284,7 @@ enum NaryImpl {
         }
 
         if let list = list {
-            var product = Dict()
+            var product = HDict()
             for i in 0..<result {
                 for (j, elem) in list.enumerated() {
                     product[.int(list.count * i + j)] = elem.value
@@ -322,6 +322,63 @@ enum NaryImpl {
         }
 
         context.stack.append(.bool(lhs != rhs))
+    }
+
+}
+
+extension Nary: CustomDebugStringConvertible {
+
+    var debugDescription: String {
+        switch self {
+        case .minus:
+            return "Nary.minus"
+        case .negate:
+            return "Nary.negate"
+        case .not:
+            return "Nary.not"
+        case .equals:
+            return "Nary.equals"
+        case .notEquals:
+            return "Nary.notEquals"
+        case .dictAdd:
+            return "Nary.dictAdd"
+        case .plus(arity: let arity):
+            return "Nary.plus(arity: \(String(reflecting: arity)))"
+        case .atLabel:
+            return "Nary.atLabel"
+        case .range:
+            return "Nary.range"
+        case .isEmpty:
+            return "Nary.isEmpty"
+        case .len:
+            return "Nary.len"
+        case .setAdd:
+            return "Nary.setAdd"
+        case .keys:
+            return "Nary.keys"
+        case .lessThan:
+            return "Nary.lessThan"
+        case .greaterThan:
+            return "Nary.greaterThan"
+        case .lessThanOrEqual:
+            return "Nary.lessThanOrEqual"
+        case .greaterThanOrEqual:
+            return "Nary.greaterThanOrEqual"
+        case .in:
+            return "Nary.in"
+        case .min:
+            return "Nary.min"
+        case .max:
+            return "Nary.max"
+        case .union(arity: let arity):
+            return "Nary.union(arity: \(arity))"
+        case .getContext:
+            return "Nary.getContext"
+        case .times(arity: let arity):
+            return "Nary.times(arity: \(arity))"
+        case .mod:
+            return "Nary.mod"
+        }
     }
 
 }

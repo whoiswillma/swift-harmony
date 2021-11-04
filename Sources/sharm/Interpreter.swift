@@ -70,10 +70,10 @@ class Interpreter {
 
     var spawnCounter: Int = 0
     var nondeterminism: Nondeterminism
-    var vars: Dict
+    var vars: HDict
     var contextBag: Bag<Context>
 
-    var nonterminatedContexts: Swift.Set<Context> {
+    var nonterminatedContexts: Set<Context> {
         contextBag.elements().filter { !$0.terminated }
     }
 
@@ -84,7 +84,7 @@ class Interpreter {
     init(code: [Op], nondeterminism: Nondeterminism) {
         self.code = code
         self.nondeterminism = nondeterminism
-        self.vars = Dict()
+        self.vars = HDict()
         self.contextBag = Bag([.initContext])
     }
 
@@ -94,7 +94,7 @@ class Interpreter {
         if let context = contexts.first(where: { $0.isAtomic }) {
             return [context]
         } else {
-            return contexts.sorted()
+            return contexts.sorted(by: { $0.name < $1.name })
         }
     }
 
@@ -120,7 +120,8 @@ class Interpreter {
             var firstInstruction = true
             while !visitor.context.terminated {
                 do {
-                    logger.trace("\(visitor.context.name), \(code[visitor.context.pc]), \(visitor.context.stack)")
+                    logger.trace("\(visitor.context.name), \(code[visitor.context.pc]), [\(visitor.context.stack.map { $0.description }.joined(separator: ", "))]")
+//                    logger.trace("\(visitor.context.name), \(vars)")
 
                     if firstInstruction, !visitor.context.isAtomic, case .atomicInc = code[visitor.context.pc] {
                         throw InterpreterInterrupt.switchPoint

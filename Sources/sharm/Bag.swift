@@ -67,8 +67,8 @@ struct Bag<T: Hashable> {
         return value
     }
 
-    func elements() -> Swift.Set<T> {
-        Swift.Set(collection.keys)
+    func elements() -> Set<T> {
+        Set(collection.keys)
     }
 
     func elementsWithMultiplicity() -> [T] {

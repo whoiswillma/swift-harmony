@@ -13,17 +13,17 @@ class StatefulModelChecker {
 
         static let initialState = State(
             contextBag: Bag([.initContext]),
-            vars: Dict(),
+            vars: HDict(),
             nextContextToRun: .initContext
         )
 
         var contextBag: Bag<Context>
-        var vars: Dict
+        var vars: HDict
 
         var nextContextToRun: Context
         var nextIndexToChoose: Int?
 
-        var nonterminatedContexts: Swift.Set<Context> {
+        var nonterminatedContexts: Set<Context> {
             contextBag.elements().filter { !$0.terminated }
         }
 
@@ -31,7 +31,7 @@ class StatefulModelChecker {
             nonterminatedContexts.isEmpty
         }
 
-        var runnable: Swift.Set<Context> {
+        var runnable: Set<Context> {
             let contexts = nonterminatedContexts
 
             if let context = contexts.first(where: { $0.isAtomic }) {
@@ -109,8 +109,8 @@ class StatefulModelChecker {
     }
 
     func run() throws {
-        var visited: Swift.Set<State> = []
-        var boundary: Swift.Set<State> = [.initialState]
+        var visited: Set<State> = []
+        var boundary: Set<State> = [.initialState]
 
         while var state = boundary.popFirst() {
             if visited.contains(state) {

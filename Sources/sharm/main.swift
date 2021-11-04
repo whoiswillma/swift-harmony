@@ -97,11 +97,29 @@ extension Sharm {
         @OptionGroup
         var options: Options
 
+        @Option
+        var sharmSourcesDir = FileManager.default.currentDirectoryPath
+
+        @Option
+        var outputDir = FileManager.default.currentDirectoryPath
+
+        @Flag
+        var dryRun = false
+
+        @Flag
+        var genSanityChecks = false
+
         func run() throws {
             options.setLoggerLevel()
 
             let code = try options.readCodeFromHvmPath()
-            let compiler = H2SCompiler(code: code)
+            let compiler = H2SCompiler(
+                code: code,
+                sharmSourcesDir: sharmSourcesDir,
+                outputDir: outputDir,
+                dryRun: dryRun,
+                genSanityChecks: genSanityChecks
+            )
             try compiler.run()
         }
 
