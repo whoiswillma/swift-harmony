@@ -162,7 +162,7 @@ enum NaryImpl {
         }
 
         if let existingValue = dict[key] {
-            dict[key] = max(value, existingValue)
+            dict[key] = Swift.max(value, existingValue)
         } else {
             dict[key] = value
         }
@@ -259,7 +259,7 @@ enum NaryImpl {
         var list: HDict?
         var result: Int = 1
 
-        for i in 0..<arity {
+        for _ in 0..<arity {
             guard let value = context.stack.popLast() else {
                 throw OpError.stackIsEmpty
             }
@@ -322,6 +322,56 @@ enum NaryImpl {
         }
 
         context.stack.append(.bool(lhs != rhs))
+    }
+
+    static func min(context: inout Context) throws {
+        guard let value = context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
+
+        switch value {
+        case .set(let s):
+            guard let m = s.min() else {
+                throw OpError.setIsEmpty
+            }
+
+            context.stack.append(m)
+
+        case .dict(let d):
+            guard let m = d.values.min() else {
+                throw OpError.dictIsEmpty
+            }
+
+            context.stack.append(m)
+
+        default:
+            throw OpError.typeMismatch(expected: [.set, .dict], actual: [value.type])
+        }
+    }
+
+    static func max(context: inout Context) throws {
+        guard let value = context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
+
+        switch value {
+        case .set(let s):
+            guard let m = s.max() else {
+                throw OpError.setIsEmpty
+            }
+
+            context.stack.append(m)
+
+        case .dict(let d):
+            guard let m = d.values.max() else {
+                throw OpError.dictIsEmpty
+            }
+
+            context.stack.append(m)
+
+        default:
+            throw OpError.typeMismatch(expected: [.set, .dict], actual: [value.type])
+        }
     }
 
 }

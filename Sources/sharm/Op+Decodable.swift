@@ -20,6 +20,8 @@ extension Op {
         case eternal
         case cond
         case set
+        case count
+        case offset
     }
 
 }
@@ -230,6 +232,14 @@ extension Op: Decodable {
 
         case "Dup":
             self = .dup
+
+        case "Split":
+            let count = try Int(values.decode(String.self, forKey: .count))!
+            self = .split(count: count)
+
+        case "Move":
+            let offset = try Int(values.decode(String.self, forKey: .offset))!
+            self = .move(offset: offset)
 
         default:
             fatalError(op)

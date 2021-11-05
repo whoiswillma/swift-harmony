@@ -23,6 +23,8 @@ enum OpError: Error {
     case invalidCalltype(Int)
     case setIsEmpty
     case invalidKey(key: Value)
+    case wrongCountSplit(actual: Int, expected: Int)
+    case dictIsEmpty
 
 }
 
@@ -53,6 +55,8 @@ enum Op: Hashable {
     case cut(setName: String, varTree: VarTree)
     case incVar(varName: String)
     case dup
+    case split(count: Int)
+    case move(offset: Int)
 
 }
 
@@ -88,7 +92,10 @@ enum OpImpl {
         context.stack.append(.dict(context.vars))
         context.stack.append(.int(context.fp))
 
+        let valueThis = context.vars[.atom("this")]
         context.vars = HDict()
+        context.vars[.atom("this")] = valueThis
+
         try matchVarTree(varTree: params, value: args, vars: &context.vars)
 
         context.fp = context.stack.count
@@ -171,6 +178,12 @@ enum OpImpl {
         case .notEquals:
             try NaryImpl.notEquals(context: &context)
 
+        case .min:
+            try NaryImpl.min(context: &context)
+
+        case .max:
+            try NaryImpl.max(context: &context)
+
         default:
             throw OpError.unimplemented("Nary \(n)")
         }
@@ -202,6 +215,10 @@ enum OpImpl {
             }
 
             try context.vars.replace(valueAt: indexPath, with: value)
+
+            if indexPath == [.atom("this"), .atom("__print__")] {
+                print(value)
+            }
         }
 
         context.pc += 1
@@ -218,7 +235,9 @@ enum OpImpl {
         guard case let .dict(originalVars) = context.stack.popLast() else {
             throw OpError.stackTypeMismatch(expected: .dict)
         }
+        let thisValue = context.vars[.atom("this")]
         context.vars = originalVars
+        context.vars[.atom("this")] = thisValue
 
         // pop call arguments
         guard nil != context.stack.popLast() else {
@@ -434,12 +453,14 @@ enum OpImpl {
 
         parent.pc += 1
 
-        return Context(
+        var context = Context(
             name: name,
             entry: pc,
             arg: arg,
             stack: [.calltype(Calltype.process), arg]
         )
+        context.vars[.atom("this")] = this
+        return context
     }
 
     static func cut(context: inout Context, setName: String, varTree: VarTree) throws {
@@ -472,6 +493,43 @@ enum OpImpl {
         }
 
         context.stack.append(value)
+    }
+
+    static func split(context: inout Context, count: Int) throws {
+        guard let value = context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
+
+        switch value {
+        case .dict(let dict):
+            guard dict.count == count else {
+                throw OpError.wrongCountSplit(actual: dict.count, expected: count)
+            }
+
+            for i in dict.elements {
+                context.stack.append(i.value)
+            }
+
+        case .set(let set):
+            guard set.count == count else {
+                throw OpError.wrongCountSplit(actual: set.count, expected: count)
+            }
+
+            for i in set.elements {
+                context.stack.append(i)
+            }
+
+        default:
+            throw OpError.typeMismatch(expected: [.dict, .set], actual: [value.type])
+        }
+
+        context.pc += 1
+    }
+
+    static func move(context: inout Context, offset: Int) throws {
+        context.stack.swapAt(context.stack.count - 1, context.stack.count - offset)
+        
+        context.pc += 1
     }
 
 }

@@ -185,7 +185,9 @@ private struct GenMainSwift {
                  .pop,
                  .cut,
                  .incVar,
-                 .dup:
+                 .dup,
+                 .split,
+                 .move:
 
                 break
             }
@@ -228,7 +230,9 @@ private struct GenMainSwift {
                  .store,
                  .load,
                  .atomicDec,
-                 .atomicInc:
+                 .atomicInc,
+                 .split,
+                 .move:
 
                 basicBlock.append(op)
                 pc += 1
@@ -266,6 +270,8 @@ private struct GenMainSwift {
                  .jumpCond,
                  .ret,
                  .apply,
+                 .split,
+                 .move,
                  nil:
 
                 break
@@ -314,7 +320,13 @@ private struct GenMainSwift {
             stepFn += "    case \(block.pc):\n"
             for (i, op) in block.ops.enumerated() {
                 if printContext {
-                    stepFn += ##"        print(context.name, #"\##(op)"#, "[\(context.stack.map { $0.description }.joined(separator: ", "))]")\##n"##
+                    stepFn += ##"""
+                            print(
+                                context.name,
+                                #"\##(op)"#,
+                                "[\(context.stack.map { $0.description }.joined(separator: ", "))]"
+                            )\##n
+                    """##
                 }
                 if printVars {
                     stepFn += "        print(context.name, vars)\n"
@@ -325,8 +337,10 @@ private struct GenMainSwift {
                 if enableAssertions {
                     stepFn += "        assert(context.pc == \(block.pc + i))\n"
                 }
-                stepFn += "        try \(generateLine(op: op))\n"
-
+                let lines = generateLine(op: op).split(separator: "\n")
+                for line in lines {
+                    stepFn += "        \(line)\n"
+                }
             }
         }
 
@@ -345,82 +359,88 @@ private struct GenMainSwift {
     private func generateLine(op: Op) -> String {
         switch op {
         case .frame(name: let name, params: let params):
-            return "OpImpl.frame(context: &context, name: \(String(reflecting: name)), params: \(String(reflecting: params)))"
+            return "try OpImpl.frame(context: &context, name: \(String(reflecting: name)), params: \(String(reflecting: params)))"
 
         case .push(value: let value):
-            return "OpImpl.push(context: &context, value: \(String(reflecting: value)))"
+            return "try OpImpl.push(context: &context, value: \(String(reflecting: value)))"
 
         case .sequential:
-            return "OpImpl.sequential(context: &context)"
+            return "try OpImpl.sequential(context: &context)"
 
         case .choose:
-            return "OpImpl.choose(context: &context, chooseFn: { s in Int.random(in: 0..<s.count) })"
+            return "try OpImpl.choose(context: &context, chooseFn: { s in Int.random(in: 0..<s.count) })"
 
         case .store(address: let address):
-            return "OpImpl.store(context: &context, vars: &vars, address: \(String(reflecting: address)))"
+            return "try OpImpl.store(context: &context, vars: &vars, address: \(String(reflecting: address)))"
 
         case .storeVar(varTree: let varTree):
-            return "OpImpl.storeVar(context: &context, varTree: \(String(reflecting: varTree)))"
+            return "try OpImpl.storeVar(context: &context, varTree: \(String(reflecting: varTree)))"
 
         case .jump(pc: let pc):
-            return "OpImpl.jump(context: &context, pc: \(String(reflecting: pc)))"
+            return "try OpImpl.jump(context: &context, pc: \(String(reflecting: pc)))"
 
         case .jumpCond(pc: let pc, cond: let cond):
-            return "OpImpl.jumpCond(context: &context, pc: \(String(reflecting: pc)), cond: \(String(reflecting: cond)))"
+            return "try OpImpl.jumpCond(context: &context, pc: \(String(reflecting: pc)), cond: \(String(reflecting: cond)))"
 
         case .loadVar(varName: let varName):
-            return "OpImpl.loadVar(context: &context, varName: \(String(reflecting: varName)))"
+            return "try OpImpl.loadVar(context: &context, varName: \(String(reflecting: varName)))"
 
         case .load(address: let address):
-            return "OpImpl.load(context: &context, vars: &vars, address: \(String(reflecting: address)))"
+            return "try OpImpl.load(context: &context, vars: &vars, address: \(String(reflecting: address)))"
 
         case .address:
-            return "OpImpl.address(context: &context)"
+            return "try OpImpl.address(context: &context)"
 
         case .nary(nary: let nary):
-            return "OpImpl.nary(context: &context, contextBag: contextBag, nary: \(String(reflecting: nary)))"
+            return "try OpImpl.nary(context: &context, contextBag: contextBag, nary: \(String(reflecting: nary)))"
 
         case .atomicInc(lazy: let lazy):
-            return "OpImpl.atomicInc(context: &context, lazy: \(String(reflecting: lazy)))"
+            return "try OpImpl.atomicInc(context: &context, lazy: \(String(reflecting: lazy)))"
 
         case .atomicDec:
-            return "OpImpl.atomicDec(context: &context)"
+            return "try OpImpl.atomicDec(context: &context)"
 
         case .readonlyInc:
-            return "OpImpl.readonlyInc(context: &context)"
+            return "try OpImpl.readonlyInc(context: &context)"
 
         case .readonlyDec:
-            return "OpImpl.readonlyDec(context: &context)"
+            return "try OpImpl.readonlyDec(context: &context)"
 
         case .assertOp:
-            return "OpImpl.assertOp(context: &context)"
+            return "try OpImpl.assertOp(context: &context)"
 
         case .delVar(varName: let varName):
-            return "OpImpl.delVar(context: &context, varName: \(String(reflecting: varName)))"
+            return "try OpImpl.delVar(context: &context, varName: \(String(reflecting: varName)))"
 
         case .ret:
-            return "OpImpl.ret(context: &context)"
+            return "try OpImpl.ret(context: &context)"
 
         case .spawn(eternal: let eternal):
             return #"""
-            contextBag.add(OpImpl.spawn(parent: &context, name: "T\(threadCount)", eternal: \#(String(reflecting: eternal))))
-                    threadCount += 1
+            try contextBag.add(OpImpl.spawn(parent: &context, name: "T\(threadCount)", eternal: \#(String(reflecting: eternal))))
+            threadCount += 1
             """#
 
         case .apply:
-            return "OpImpl.apply(context: &context)"
+            return "try OpImpl.apply(context: &context)"
 
         case .pop:
-            return "OpImpl.pop(context: &context)"
+            return "try OpImpl.pop(context: &context)"
 
         case .cut(setName: let setName, varTree: let varTree):
-            return "OpImpl.cut(context: &context, setName: \(String(reflecting: setName)), varTree: \(String(reflecting: varTree)))"
+            return "try OpImpl.cut(context: &context, setName: \(String(reflecting: setName)), varTree: \(String(reflecting: varTree)))"
 
         case .incVar(varName: let varName):
-            return "OpImpl.incVar(context: &context, varName: \(String(reflecting: varName)))"
+            return "try OpImpl.incVar(context: &context, varName: \(String(reflecting: varName)))"
 
         case .dup:
-            return "OpImpl.dup(context: &context)"
+            return "try OpImpl.dup(context: &context)"
+
+        case .split(count: let count):
+            return "try OpImpl.split(context: &context, count: \(String(reflecting: count)))"
+
+        case .move(offset: let offset):
+            return "try OpImpl.move(context: &context, offset: \(String(reflecting: offset)))"
         }
     }
 

@@ -34,6 +34,8 @@ protocol OpVisitor {
     mutating func cut(setName: String, varTree: VarTree) throws
     mutating func incVar(varName: String) throws
     mutating func dup() throws
+    mutating func split(count: Int) throws
+    mutating func move(offset: Int) throws
 
 }
 
@@ -91,6 +93,10 @@ extension Op {
             try visitor.incVar(varName: varName)
         case .dup:
             try visitor.dup()
+        case .split(count: let count):
+            try visitor.split(count: count)
+        case .move(offset: let offset):
+            try visitor.move(offset: offset)
         }
     }
 
@@ -186,6 +192,14 @@ extension DeterministicContextOpVisitor {
 
     mutating func dup() throws {
         try OpImpl.dup(context: &context)
+    }
+
+    mutating func split(count: Int) throws {
+        try OpImpl.split(context: &context, count: count)
+    }
+
+    mutating func move(offset: Int) throws {
+        try OpImpl.move(context: &context, offset: offset)
     }
 
 }

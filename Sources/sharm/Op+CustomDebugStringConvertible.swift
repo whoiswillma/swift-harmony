@@ -61,6 +61,10 @@ extension Op: CustomDebugStringConvertible {
             return "Op.incVar(varName: \(varName))"
         case .dup:
             return "Op.dup"
+        case .split(count: let count):
+            return "Op.split(count: \(String(reflecting: count)))"
+        case .move(offset: let offset):
+            return "Op.move(offset: \(String(reflecting: offset))"
         }
     }
 
