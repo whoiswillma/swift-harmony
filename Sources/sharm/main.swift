@@ -1,5 +1,4 @@
 import ArgumentParser
-import OrderedCollections
 import Foundation
 
 enum LogLevel: String, ExpressibleByArgument {

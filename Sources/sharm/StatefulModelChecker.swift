@@ -128,7 +128,7 @@ class StatefulModelChecker {
             logger.trace("Context switch to \(visitor.context.name)")
             do {
                 while !visitor.context.terminated {
-                    logger.trace("\(visitor.context.name), \(code[visitor.context.pc]), \(visitor.context.stack)")
+                    logger.trace("\(code[visitor.context.pc]), \(visitor.context)")
                     try code[visitor.context.pc].accept(&visitor)
                 }
 

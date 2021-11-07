@@ -111,6 +111,14 @@ extension Context {
 
 }
 
+extension Context: CustomStringConvertible {
+
+    var description: String {
+        return "\(name), [\(stack.map { $0.description }.joined(separator: ", "))]"
+    }
+
+}
+
 enum Calltype: Int {
     case process = 1
     case normal = 2
