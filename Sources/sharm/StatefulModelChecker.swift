@@ -19,7 +19,6 @@ class StatefulModelChecker {
         var vars: HDict
 
         var nextContextToRun: Context
-        var nextIndexToChoose: Int?
 
         var nonterminatedContexts: Set<Context> {
             contextBag.elements().filter { !$0.terminated }
@@ -46,7 +45,7 @@ class StatefulModelChecker {
         case switchPoint(Op)
     }
 
-    struct Visitor: DeterministicContextOpVisitor {
+    struct Visitor: DefaultOpVisitor {
 
         var context: Context
         var contextBag: Bag<Context>

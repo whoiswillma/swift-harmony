@@ -10,7 +10,7 @@ private enum InterpreterInterrupt: Error {
     case spawn(Context)
 }
 
-private struct InterpreterOpVisitor: DeterministicContextOpVisitor {
+private struct InterpreterOpVisitor: DefaultOpVisitor {
 
     var context: Context
     unowned let interpreter: Interpreter

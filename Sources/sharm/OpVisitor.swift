@@ -7,106 +7,201 @@
 
 protocol OpVisitor {
 
-    mutating func frame(name: String, params: VarTree) throws
-    mutating func push(value: Value) throws
-    mutating func sequential() throws
-    mutating func choose() throws
-    mutating func store(address: Value?) throws
-    mutating func storeVar(varTree: VarTree?) throws
-    mutating func jump(pc: Int) throws
-    mutating func jumpCond(pc: Int, cond: Value) throws
-    mutating func loadVar(varName: String?) throws
-    mutating func load(address: Value?) throws
-    mutating func address() throws
-    mutating func nary(nary: Nary) throws
-    mutating func atomicInc(lazy: Bool) throws
-    mutating func atomicDec() throws
-    mutating func readonlyInc() throws
-    mutating func readonlyDec() throws
-    mutating func assertOp() throws
-    mutating func delVar(varName: String?) throws
-    mutating func ret() throws
-    mutating func spawn(eternal: Bool) throws
-    mutating func apply() throws
-    mutating func pop() throws
-    mutating func cut(setName: String, varTree: VarTree) throws
-    mutating func incVar(varName: String) throws
-    mutating func dup() throws
-    mutating func split(count: Int) throws
-    mutating func move(offset: Int) throws
+    associatedtype Output
+
+    mutating func frame(name: String, params: VarTree) throws -> Output
+    mutating func push(value: Value) throws -> Output
+    mutating func sequential() throws -> Output
+    mutating func choose() throws -> Output
+    mutating func store(address: Value?) throws -> Output
+    mutating func storeVar(varTree: VarTree?) throws -> Output
+    mutating func jump(pc: Int) throws -> Output
+    mutating func jumpCond(pc: Int, cond: Value) throws -> Output
+    mutating func loadVar(varName: String?) throws -> Output
+    mutating func load(address: Value?) throws -> Output
+    mutating func address() throws -> Output
+    mutating func nary(nary: Nary) throws -> Output
+    mutating func atomicInc(lazy: Bool) throws -> Output
+    mutating func atomicDec() throws -> Output
+    mutating func readonlyInc() throws -> Output
+    mutating func readonlyDec() throws -> Output
+    mutating func assertOp() throws -> Output
+    mutating func delVar(varName: String?) throws -> Output
+    mutating func ret() throws -> Output
+    mutating func spawn(eternal: Bool) throws -> Output
+    mutating func apply() throws -> Output
+    mutating func pop() throws -> Output
+    mutating func cut(setName: String, varTree: VarTree) throws -> Output
+    mutating func incVar(varName: String) throws -> Output
+    mutating func dup() throws -> Output
+    mutating func split(count: Int) throws -> Output
+    mutating func move(offset: Int) throws -> Output
+
+}
+
+protocol PureOpVisitor: OpVisitor {
+
+    associatedtype Output
+
+    func frame(name: String, params: VarTree) -> Output
+    func push(value: Value) -> Output
+    func sequential() -> Output
+    func choose() -> Output
+    func store(address: Value?) -> Output
+    func storeVar(varTree: VarTree?) -> Output
+    func jump(pc: Int) -> Output
+    func jumpCond(pc: Int, cond: Value) -> Output
+    func loadVar(varName: String?) -> Output
+    func load(address: Value?) -> Output
+    func address() -> Output
+    func nary(nary: Nary) -> Output
+    func atomicInc(lazy: Bool) -> Output
+    func atomicDec() -> Output
+    func readonlyInc() -> Output
+    func readonlyDec() -> Output
+    func assertOp() -> Output
+    func delVar(varName: String?) -> Output
+    func ret() -> Output
+    func spawn(eternal: Bool) -> Output
+    func apply() -> Output
+    func pop() -> Output
+    func cut(setName: String, varTree: VarTree) -> Output
+    func incVar(varName: String) -> Output
+    func dup() -> Output
+    func split(count: Int) -> Output
+    func move(offset: Int) -> Output
 
 }
 
 extension Op {
 
-    func accept<T: OpVisitor>(_ visitor: inout T) throws {
+    func accept<T: OpVisitor>(_ visitor: inout T) throws -> T.Output {
         switch self {
         case .frame(name: let name, params: let params):
-            try visitor.frame(name: name, params: params)
+            return try visitor.frame(name: name, params: params)
         case .push(let value):
-            try visitor.push(value: value)
+            return try visitor.push(value: value)
         case .sequential:
-            try visitor.sequential()
+            return try visitor.sequential()
         case .choose:
-            try visitor.choose()
+            return try visitor.choose()
         case .store(let address):
-            try visitor.store(address: address)
+            return try visitor.store(address: address)
         case .storeVar(let varTree):
-            try visitor.storeVar(varTree: varTree)
+            return try visitor.storeVar(varTree: varTree)
         case .jump(pc: let pc):
-            try visitor.jump(pc: pc)
+            return try visitor.jump(pc: pc)
         case .jumpCond(pc: let pc, cond: let cond):
-            try visitor.jumpCond(pc: pc, cond: cond)
+            return try visitor.jumpCond(pc: pc, cond: cond)
         case .loadVar(let varName):
-            try visitor.loadVar(varName: varName)
+            return try visitor.loadVar(varName: varName)
         case .load(let address):
-            try visitor.load(address: address)
+            return try visitor.load(address: address)
         case .address:
-            try visitor.address()
+            return try visitor.address()
         case .nary(let nary):
-            try visitor.nary(nary: nary)
+            return try visitor.nary(nary: nary)
         case .atomicInc(lazy: let lazy):
-            try visitor.atomicInc(lazy: lazy)
+            return try visitor.atomicInc(lazy: lazy)
         case .atomicDec:
-            try visitor.atomicDec()
+            return try visitor.atomicDec()
         case .readonlyInc:
-            try visitor.readonlyInc()
+            return try visitor.readonlyInc()
         case .readonlyDec:
-            try visitor.readonlyDec()
+            return try visitor.readonlyDec()
         case .assertOp:
-            try visitor.assertOp()
+            return try visitor.assertOp()
         case .delVar(let varName):
-            try visitor.delVar(varName: varName)
+            return try visitor.delVar(varName: varName)
         case .ret:
-            try visitor.ret()
+            return try visitor.ret()
         case .cut(let set, let value):
-            try visitor.cut(setName: set, varTree: value)
+            return try visitor.cut(setName: set, varTree: value)
         case .spawn(eternal: let eternal):
-            try visitor.spawn(eternal: eternal)
+            return try visitor.spawn(eternal: eternal)
         case .apply:
-            try visitor.apply()
+            return try visitor.apply()
         case .pop:
-            try visitor.pop()
+            return try visitor.pop()
         case .incVar(let varName):
-            try visitor.incVar(varName: varName)
+            return try visitor.incVar(varName: varName)
         case .dup:
-            try visitor.dup()
+            return try visitor.dup()
         case .split(count: let count):
-            try visitor.split(count: count)
+            return try visitor.split(count: count)
         case .move(offset: let offset):
-            try visitor.move(offset: offset)
+            return try visitor.move(offset: offset)
+        }
+    }
+
+    func accept<T: PureOpVisitor>(_ visitor: T) -> T.Output {
+        switch self {
+        case .frame(name: let name, params: let params):
+            return visitor.frame(name: name, params: params)
+        case .push(let value):
+            return visitor.push(value: value)
+        case .sequential:
+            return visitor.sequential()
+        case .choose:
+            return visitor.choose()
+        case .store(let address):
+            return visitor.store(address: address)
+        case .storeVar(let varTree):
+            return visitor.storeVar(varTree: varTree)
+        case .jump(pc: let pc):
+            return visitor.jump(pc: pc)
+        case .jumpCond(pc: let pc, cond: let cond):
+            return visitor.jumpCond(pc: pc, cond: cond)
+        case .loadVar(let varName):
+            return visitor.loadVar(varName: varName)
+        case .load(let address):
+            return visitor.load(address: address)
+        case .address:
+            return visitor.address()
+        case .nary(let nary):
+            return visitor.nary(nary: nary)
+        case .atomicInc(lazy: let lazy):
+            return visitor.atomicInc(lazy: lazy)
+        case .atomicDec:
+            return visitor.atomicDec()
+        case .readonlyInc:
+            return visitor.readonlyInc()
+        case .readonlyDec:
+            return visitor.readonlyDec()
+        case .assertOp:
+            return visitor.assertOp()
+        case .delVar(let varName):
+            return visitor.delVar(varName: varName)
+        case .ret:
+            return visitor.ret()
+        case .cut(let set, let value):
+            return visitor.cut(setName: set, varTree: value)
+        case .spawn(eternal: let eternal):
+            return visitor.spawn(eternal: eternal)
+        case .apply:
+            return visitor.apply()
+        case .pop:
+            return visitor.pop()
+        case .incVar(let varName):
+            return visitor.incVar(varName: varName)
+        case .dup:
+            return visitor.dup()
+        case .split(count: let count):
+            return visitor.split(count: count)
+        case .move(offset: let offset):
+            return visitor.move(offset: offset)
         }
     }
 
 }
 
-protocol DeterministicContextOpVisitor: OpVisitor {
+protocol DefaultOpVisitor: OpVisitor where Output == Void {
 
     var context: Context { get set }
 
 }
 
-extension DeterministicContextOpVisitor {
+extension DefaultOpVisitor {
 
     mutating func frame(name: String, params: VarTree) throws {
         try OpImpl.frame(context: &context, name: name, params: params)

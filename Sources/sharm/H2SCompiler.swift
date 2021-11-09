@@ -42,6 +42,7 @@ class H2SCompiler {
         generatePreamble()
         + H2SUtil.generateStepFunction(
             ops: code,
+            genLine: H2SCompilerLineGenerator(),
             enableAssertions: genSanityChecks,
             printContext: genSanityChecks,
             printVars: genSanityChecks
@@ -86,6 +87,17 @@ class H2SCompiler {
         }
 
         """
+    }
+
+}
+
+private struct H2SCompilerLineGenerator: H2SDefaultGenLineVisitor {
+
+    func spawn(eternal: Bool) -> String {
+        #"""
+        try contextBag.add(OpImpl.spawn(parent: &context, name: "T\(threadCount)", eternal: \#(String(reflecting: eternal))))
+        threadCount += 1
+        """#
     }
 
 }

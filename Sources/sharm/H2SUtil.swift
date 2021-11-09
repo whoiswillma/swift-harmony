@@ -231,95 +231,13 @@ extension H2SUtil {
         return basicBlock
     }
 
-    private static func generateLine(op: Op) -> String {
-        switch op {
-        case .frame(name: let name, params: let params):
-            return "try OpImpl.frame(context: &context, name: \(String(reflecting: name)), params: \(String(reflecting: params)))"
-
-        case .push(value: let value):
-            return "try OpImpl.push(context: &context, value: \(String(reflecting: value)))"
-
-        case .sequential:
-            return "try OpImpl.sequential(context: &context)"
-
-        case .choose:
-            return "try OpImpl.choose(context: &context, chooseFn: { s in Int.random(in: 0..<s.count) })"
-
-        case .store(address: let address):
-            return "try OpImpl.store(context: &context, vars: &vars, address: \(String(reflecting: address)))"
-
-        case .storeVar(varTree: let varTree):
-            return "try OpImpl.storeVar(context: &context, varTree: \(String(reflecting: varTree)))"
-
-        case .jump(pc: let pc):
-            return "try OpImpl.jump(context: &context, pc: \(String(reflecting: pc)))"
-
-        case .jumpCond(pc: let pc, cond: let cond):
-            return "try OpImpl.jumpCond(context: &context, pc: \(String(reflecting: pc)), cond: \(String(reflecting: cond)))"
-
-        case .loadVar(varName: let varName):
-            return "try OpImpl.loadVar(context: &context, varName: \(String(reflecting: varName)))"
-
-        case .load(address: let address):
-            return "try OpImpl.load(context: &context, vars: &vars, address: \(String(reflecting: address)))"
-
-        case .address:
-            return "try OpImpl.address(context: &context)"
-
-        case .nary(nary: let nary):
-            return "try OpImpl.nary(context: &context, contextBag: contextBag, nary: \(String(reflecting: nary)))"
-
-        case .atomicInc(lazy: let lazy):
-            return "try OpImpl.atomicInc(context: &context, lazy: \(String(reflecting: lazy)))"
-
-        case .atomicDec:
-            return "try OpImpl.atomicDec(context: &context)"
-
-        case .readonlyInc:
-            return "try OpImpl.readonlyInc(context: &context)"
-
-        case .readonlyDec:
-            return "try OpImpl.readonlyDec(context: &context)"
-
-        case .assertOp:
-            return "try OpImpl.assertOp(context: &context)"
-
-        case .delVar(varName: let varName):
-            return "try OpImpl.delVar(context: &context, varName: \(String(reflecting: varName)))"
-
-        case .ret:
-            return "try OpImpl.ret(context: &context)"
-
-        case .spawn(eternal: let eternal):
-            return #"""
-            try contextBag.add(OpImpl.spawn(parent: &context, name: "T\(threadCount)", eternal: \#(String(reflecting: eternal))))
-            threadCount += 1
-            """#
-
-        case .apply:
-            return "try OpImpl.apply(context: &context)"
-
-        case .pop:
-            return "try OpImpl.pop(context: &context)"
-
-        case .cut(setName: let setName, varTree: let varTree):
-            return "try OpImpl.cut(context: &context, setName: \(String(reflecting: setName)), varTree: \(String(reflecting: varTree)))"
-
-        case .incVar(varName: let varName):
-            return "try OpImpl.incVar(context: &context, varName: \(String(reflecting: varName)))"
-
-        case .dup:
-            return "try OpImpl.dup(context: &context)"
-
-        case .split(count: let count):
-            return "try OpImpl.split(context: &context, count: \(String(reflecting: count)))"
-
-        case .move(offset: let offset):
-            return "try OpImpl.move(context: &context, offset: \(String(reflecting: offset)))"
-        }
-    }
-
-    static func generateStepFunction(ops: [Op], enableAssertions: Bool, printContext: Bool, printVars: Bool) -> String {
+    static func generateStepFunction<LineGenerator: PureOpVisitor>(
+        ops: [Op],
+        genLine: LineGenerator,
+        enableAssertions: Bool,
+        printContext: Bool,
+        printVars: Bool
+    ) -> String where LineGenerator.Output == String {
         let blocks = getBasicBlocks(ops: ops)
         var stepFn = """
         func step(context: inout Context) throws {
@@ -348,7 +266,7 @@ extension H2SUtil {
                 if enableAssertions {
                     stepFn += "        assert(context.pc == \(block.pc + i))\n"
                 }
-                let lines = generateLine(op: op).split(separator: "\n")
+                let lines = op.accept(genLine).split(separator: "\n")
                 for line in lines {
                     stepFn += "        \(line)\n"
                 }
@@ -365,6 +283,122 @@ extension H2SUtil {
         """#
 
         return stepFn
+    }
+
+}
+
+protocol H2SDefaultGenLineVisitor: PureOpVisitor where Output == String {
+
+}
+
+extension H2SDefaultGenLineVisitor {
+
+    func frame(name: String, params: VarTree) -> String {
+        "try OpImpl.frame(context: &context, name: \(String(reflecting: name)), params: \(String(reflecting: params)))"
+    }
+
+    func push(value: Value) -> String {
+        "try OpImpl.push(context: &context, value: \(String(reflecting: value)))"
+    }
+
+    func sequential() -> String {
+        "try OpImpl.sequential(context: &context)"
+    }
+
+    func choose() -> String {
+        "try OpImpl.choose(context: &context, chooseFn: { s in Int.random(in: 0..<s.count) })"
+    }
+
+    func store(address: Value?) -> String {
+        "try OpImpl.store(context: &context, vars: &vars, address: \(String(reflecting: address)))"
+    }
+
+    func storeVar(varTree: VarTree?) -> String {
+        "try OpImpl.storeVar(context: &context, varTree: \(String(reflecting: varTree)))"
+    }
+
+    func jump(pc: Int) -> String {
+        "try OpImpl.jump(context: &context, pc: \(String(reflecting: pc)))"
+    }
+
+    func jumpCond(pc: Int, cond: Value) -> String {
+        "try OpImpl.jumpCond(context: &context, pc: \(String(reflecting: pc)), cond: \(String(reflecting: cond)))"
+    }
+
+    func loadVar(varName: String?) -> String {
+        "try OpImpl.loadVar(context: &context, varName: \(String(reflecting: varName)))"
+    }
+
+    func load(address: Value?) -> String {
+        "try OpImpl.load(context: &context, vars: &vars, address: \(String(reflecting: address)))"
+    }
+
+    func address() -> String {
+        "try OpImpl.address(context: &context)"
+    }
+
+    func nary(nary: Nary) -> String {
+        "try OpImpl.nary(context: &context, contextBag: contextBag, nary: \(String(reflecting: nary)))"
+    }
+
+    func atomicInc(lazy: Bool) -> String {
+        "try OpImpl.atomicInc(context: &context, lazy: \(String(reflecting: lazy)))"
+    }
+
+    func atomicDec() -> String {
+        "try OpImpl.atomicDec(context: &context)"
+    }
+
+    func readonlyInc() -> String {
+        "try OpImpl.readonlyInc(context: &context)"
+    }
+
+    func readonlyDec() -> String {
+        "try OpImpl.readonlyDec(context: &context)"
+    }
+
+    func assertOp() -> String {
+        "try OpImpl.assertOp(context: &context)"
+    }
+
+    func delVar(varName: String?) -> String {
+        "try OpImpl.delVar(context: &context, varName: \(String(reflecting: varName)))"
+    }
+
+    func ret() -> String {
+        "try OpImpl.ret(context: &context)"
+    }
+
+    func apply() -> String {
+        "try OpImpl.apply(context: &context)"
+    }
+
+    func pop() -> String {
+        "try OpImpl.pop(context: &context)"
+    }
+
+    func cut(setName: String, varTree: VarTree) -> String {
+        "try OpImpl.cut(context: &context, setName: \(String(reflecting: setName)), varTree: \(String(reflecting: varTree)))"
+    }
+
+    func incVar(varName: String) -> String {
+        "try OpImpl.incVar(context: &context, varName: \(String(reflecting: varName)))"
+    }
+
+    func dup() -> String {
+        "try OpImpl.dup(context: &context)"
+    }
+
+    func split(count: Int) -> String {
+        "try OpImpl.split(context: &context, count: \(String(reflecting: count)))"
+    }
+
+    func move(offset: Int) -> String {
+        "try OpImpl.move(context: &context, offset: \(String(reflecting: offset)))"
+    }
+
+    func spawn(eternal: Bool) throws -> Output {
+        #"try contextBag.add(OpImpl.spawn(parent: &context, name: "", eternal: \#(String(reflecting: eternal))))"#
     }
 
 }
