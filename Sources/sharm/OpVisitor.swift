@@ -41,8 +41,6 @@ protocol OpVisitor {
 
 protocol PureOpVisitor: OpVisitor {
 
-    associatedtype Output
-
     func frame(name: String, params: VarTree) -> Output
     func push(value: Value) -> Output
     func sequential() -> Output

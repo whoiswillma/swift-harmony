@@ -133,8 +133,8 @@ enum NaryImpl {
         }
 
         var result = [ResultKey: Int]()
-        for (context, count) in contextBag.elementsWithCount() {
-            if context.pc == pc {
+        for (other, count) in contextBag.elementsWithCount() {
+            if other.atomicPc == pc {
                 result[ResultKey(entry: context.entry, arg: context.arg), default: 0] += count
             }
         }

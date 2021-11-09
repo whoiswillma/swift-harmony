@@ -431,13 +431,23 @@ enum OpImpl {
 
     static func atomicInc(context: inout Context, lazy: Bool) throws {
         assert(context.atomicLevel >= 0)
+
+        if !context.isAtomic {
+            context.atomicPc = context.pc
+        }
         context.atomicLevel += 1
+
         context.pc += 1
     }
 
     static func atomicDec(context: inout Context) throws {
         context.atomicLevel -= 1
+        if !context.isAtomic {
+            context.atomicPc = -1
+        }
+
         assert(context.atomicLevel >= 0)
+
         context.pc += 1
     }
 

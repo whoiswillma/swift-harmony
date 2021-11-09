@@ -22,6 +22,10 @@ private struct InterpreterOpVisitor: DefaultOpVisitor {
 
     mutating func atomicInc(lazy: Bool) throws {
         try OpImpl.atomicInc(context: &context, lazy: lazy)
+
+        if context.isAtomic {
+            throw InterpreterInterrupt.switchPoint
+        }
     }
 
     mutating func atomicDec() throws {
@@ -56,7 +60,7 @@ private struct InterpreterOpVisitor: DefaultOpVisitor {
         throw InterpreterInterrupt.spawn(child)
     }
 
-    mutating func nary(_ nary: Nary) throws {
+    mutating func nary(nary: Nary) throws {
         try OpImpl.nary(context: &context, contextBag: interpreter.contextBag, nary: nary)
     }
 
@@ -115,20 +119,16 @@ class Interpreter {
 
         var visitor = InterpreterOpVisitor(context: context, interpreter: self)
         do {
-            var firstInstruction = true
-            while !visitor.context.terminated {
+            repeat {
                 do {
                     logger.trace("\(code[visitor.context.pc]), \(visitor.context)")
-
-                    if firstInstruction, !visitor.context.isAtomic, case .atomicInc = code[visitor.context.pc] {
-                        throw InterpreterInterrupt.switchPoint
-                    }
                     try code[visitor.context.pc].accept(&visitor)
-                    firstInstruction = false
+
                 } catch InterpreterInterrupt.spawn(let context) {
                     self.contextBag.add(context)
                 }
-            }
+            } while !visitor.context.terminated
+
         } catch InterpreterInterrupt.switchPoint {
 
         } catch {

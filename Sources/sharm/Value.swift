@@ -64,6 +64,7 @@ struct Context: Hashable {
     var isAtomic: Bool {
         atomicLevel > 0
     }
+    var atomicPc: Int // the pc of an atomicInc in which this context became atomic
     var isReadonly: Bool {
         readonlyLevel > 0
     }
@@ -78,6 +79,7 @@ struct Context: Hashable {
         self.fp = 0
         self.vars = HDict()
         self.atomicLevel = 0
+        self.atomicPc = -1
         self.readonlyLevel = 0
     }
 
