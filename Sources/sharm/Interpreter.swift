@@ -5,8 +5,6 @@
 //  Created by William Ma on 10/31/21.
 //
 
-import Foundation
-
 private enum InterpreterInterrupt: Error {
     case switchPoint
     case spawn(Context)

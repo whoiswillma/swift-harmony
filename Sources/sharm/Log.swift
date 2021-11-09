@@ -6,6 +6,5 @@
 //
 
 import Logging
-import Foundation
 
 var logger = Logger(label: "sharm")

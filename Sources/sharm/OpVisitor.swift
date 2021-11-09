@@ -5,8 +5,6 @@
 //  Created by William Ma on 10/29/21.
 //
 
-import Foundation
-
 protocol OpVisitor {
 
     mutating func frame(name: String, params: VarTree) throws

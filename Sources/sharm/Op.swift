@@ -5,8 +5,6 @@
 //  Created by William Ma on 10/26/21.
 //
 
-import Foundation
-
 enum OpError: Error {
 
     case typeMismatch(expected: Set<ValueType>, actual: [ValueType])

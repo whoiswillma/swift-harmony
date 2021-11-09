@@ -5,9 +5,6 @@
 //  Created by William Ma on 10/29/21.
 //
 
-import Foundation
-
-
 indirect enum VarTree: Hashable {
 
     case name(String)

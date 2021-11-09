@@ -5,8 +5,6 @@
 //  Created by William Ma on 10/31/21.
 //
 
-import Foundation
-
 class StatefulModelChecker {
 
     struct State: Hashable {

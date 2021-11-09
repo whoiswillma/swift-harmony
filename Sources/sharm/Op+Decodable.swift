@@ -5,8 +5,6 @@
 //  Created by William Ma on 10/29/21.
 //
 
-import Foundation
-
 extension Op {
 
     enum CodingKeys: String, CodingKey {

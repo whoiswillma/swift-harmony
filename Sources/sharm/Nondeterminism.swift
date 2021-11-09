@@ -5,8 +5,6 @@
 //  Created by William Ma on 10/26/21.
 //
 
-import Foundation
-
 protocol Nondeterminism {
 
     func chooseIndex(_ values: HSet) -> Int
