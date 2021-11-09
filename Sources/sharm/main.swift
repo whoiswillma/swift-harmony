@@ -8,7 +8,7 @@ enum LogLevel: String, ExpressibleByArgument {
 struct Sharm: ParsableCommand {
 
     static var configuration = CommandConfiguration(
-        subcommands: [Interp.self, SMC.self, Compile.self],
+        subcommands: [Interp.self, SMC.self, Compile.self, CMC.self],
         defaultSubcommand: Interp.self
     )
 
@@ -113,6 +113,39 @@ extension Sharm {
 
             let code = try options.readCodeFromHvmPath()
             let compiler = H2SCompiler(
+                code: code,
+                sharmSourcesDir: sharmSourcesDir,
+                outputDir: outputDir,
+                dryRun: dryRun,
+                genSanityChecks: genSanityChecks
+            )
+            try compiler.run()
+        }
+
+    }
+
+    struct CMC: ParsableCommand {
+
+        @OptionGroup
+        var options: Options
+
+        @Option
+        var sharmSourcesDir = FileManager.default.currentDirectoryPath
+
+        @Option
+        var outputDir = FileManager.default.currentDirectoryPath
+
+        @Flag
+        var dryRun = false
+
+        @Flag
+        var genSanityChecks = false
+
+        func run() throws {
+            options.setLoggerLevel()
+
+            let code = try options.readCodeFromHvmPath()
+            let compiler = H2SModelChecker(
                 code: code,
                 sharmSourcesDir: sharmSourcesDir,
                 outputDir: outputDir,

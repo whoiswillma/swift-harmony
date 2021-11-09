@@ -44,7 +44,7 @@ extension VarTree {
 
     private static func tokenize(_ str: String) -> [Token] {
         let special: Set<Character> = ["(", ",", ")"]
-        var str = str.components(separatedBy: .whitespacesAndNewlines).joined()
+        var str = str.split(separator: " ").joined()
         var tokens: [Token] = []
         while !str.isEmpty {
             switch str.first {

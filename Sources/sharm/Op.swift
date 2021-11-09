@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  Op.swift
 //  
 //
 //  Created by William Ma on 10/26/21.
@@ -248,7 +248,7 @@ enum OpImpl {
         }
 
         guard case let .int(calltype) = context.stack.popLast() else {
-            throw OpError.stackTypeMismatch(expected: .calltype)
+            throw OpError.stackTypeMismatch(expected: .int)
         }
 
         guard let calltype = Calltype(rawValue: calltype) else {

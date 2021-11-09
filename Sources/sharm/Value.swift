@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  Value.swift
 //  
 //
 //  Created by William Ma on 10/26/21.
@@ -134,8 +134,6 @@ enum ValueType: Int, Hashable {
     case pc
     case set
     case context
-    
-    case calltype
 
 }
 
