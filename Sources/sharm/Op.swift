@@ -247,8 +247,12 @@ enum OpImpl {
             return
         }
 
-        guard case let .calltype(calltype) = context.stack.popLast() else {
+        guard case let .int(calltype) = context.stack.popLast() else {
             throw OpError.stackTypeMismatch(expected: .calltype)
+        }
+
+        guard let calltype = Calltype(rawValue: calltype) else {
+            throw OpError.invalidCalltype(calltype)
         }
 
         switch calltype {
@@ -392,7 +396,7 @@ enum OpImpl {
 
         case let .pc(pc):
             context.stack.append(.pc(context.pc + 1))
-            context.stack.append(.calltype(Calltype.normal))
+            context.stack.append(.int(Calltype.normal.rawValue))
             context.stack.append(args)
             context.pc = pc
 
@@ -455,7 +459,7 @@ enum OpImpl {
             name: name,
             entry: pc,
             arg: arg,
-            stack: [.calltype(Calltype.process), arg]
+            stack: [.int(Calltype.process.rawValue), arg]
         )
         context.vars[.atom("this")] = this
         return context

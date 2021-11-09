@@ -149,7 +149,6 @@ indirect enum Value: Hashable {
     case pc(Int)
     case set(HSet)
     case context(Context)
-    case calltype(Calltype)
 
     var type: ValueType {
         switch self {
@@ -161,7 +160,6 @@ indirect enum Value: Hashable {
         case .pc: return .pc
         case .set: return .set
         case .context: return .context
-        case .calltype: return .calltype
         }
     }
 
@@ -315,7 +313,7 @@ extension Value: Encodable {
             try values.encode("set", forKey: .type)
             try values.encode(set.elements, forKey: .value)
 
-        case .context, .calltype:
+        case .context:
             fatalError()
         }
     }
@@ -335,7 +333,6 @@ extension Value: CustomStringConvertible {
         case .pc(let value): return "PC(\(value))"
         case .set(let value): return "{\(value.map { "\($0)" }.joined(separator: ", "))}"
         case .context: return "Context"
-        case .calltype(let calltype): return "\(calltype)"
         }
     }
 
@@ -357,7 +354,7 @@ extension Value: CustomDebugStringConvertible {
         case .address(let indexPath): return "Value.address(\(indexPath))"
         case .pc(let value): return "Value.pc(\(value))"
         case .set(let value): return "Value.set(\(value.debugDescription))"
-        case .context, .calltype: fatalError()
+        case .context: fatalError()
         }
     }
 
