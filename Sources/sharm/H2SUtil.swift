@@ -116,9 +116,6 @@ extension H2SUtil {
             case .jump(pc: let newPc):
                 startPCs.insert(newPc)
 
-            case .push(value: .pc(let newPc)):
-                startPCs.insert(newPc)
-
             case .push,
                  .sequential,
                  .choose,

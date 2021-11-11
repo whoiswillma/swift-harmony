@@ -42,19 +42,17 @@ class StatefulModelChecker {
 
     enum Interrupt: Error {
         case choose(Int)
-        case switchPoint(Op)
+        case switchPoint
     }
 
     struct Visitor: DefaultOpVisitor {
 
+        var state: State
         var context: Context
-        var contextBag: Bag<Context>
-        let modelChecker: StatefulModelChecker
 
-        init(context: Context, contextBag: Bag<Context>, modelChecker: StatefulModelChecker) {
-            self.context = context
-            self.contextBag = contextBag
-            self.modelChecker = modelChecker
+        init(state: State) {
+            self.state = state
+            self.context = state.nextContextToRun
         }
 
         func choose() throws {
@@ -65,36 +63,42 @@ class StatefulModelChecker {
             throw Interrupt.choose(s.count)
         }
 
-        func store(address: Value?) throws {
-            throw Interrupt.switchPoint(.store(address: address))
-        }
-
-        func load(address: Value?) throws {
-            throw Interrupt.switchPoint(.load(address: address))
-        }
-
-        func spawn(eternal: Bool) throws {
-            throw Interrupt.switchPoint(.spawn(eternal: eternal))
-        }
-
         mutating func atomicInc(lazy: Bool) throws {
-            if !context.isAtomic {
-                try OpImpl.atomicInc(context: &context, lazy: lazy)
-                throw Interrupt.switchPoint(.atomicInc(lazy: lazy))
-            } else {
-                try OpImpl.atomicInc(context: &context, lazy: lazy)
+            let switchPoint = !context.isAtomic
+
+            try OpImpl.atomicInc(context: &context, lazy: lazy)
+
+            if switchPoint {
+                throw Interrupt.switchPoint
             }
         }
 
         mutating func atomicDec() throws {
             try OpImpl.atomicDec(context: &context)
+
             if !context.isAtomic {
-                throw Interrupt.switchPoint(.atomicDec)
+                throw Interrupt.switchPoint
             }
         }
 
         mutating func nary(nary: Nary) throws {
-            try OpImpl.nary(context: &context, contextBag: contextBag, nary: nary)
+            try OpImpl.nary(context: &context, contextBag: state.contextBag, nary: nary)
+        }
+
+        mutating func spawn(eternal: Bool) throws {
+            let child = try OpImpl.spawn(parent: &context, name: "", eternal: eternal)
+            state.contextBag.add(child)
+            throw Interrupt.switchPoint
+        }
+
+        mutating func load(address: Value?) throws {
+            try OpImpl.load(context: &context, vars: &state.vars, address: address)
+            throw Interrupt.switchPoint
+        }
+
+        mutating func store(address: Value?) throws {
+            try OpImpl.store(context: &context, vars: &state.vars, address: address)
+            throw Interrupt.switchPoint
         }
 
     }
@@ -116,20 +120,20 @@ class StatefulModelChecker {
 
             visited.insert(state)
             assert(state.contextBag.contains(state.nextContextToRun))
-            var visitor = Visitor(
-                context: state.nextContextToRun,
-                contextBag: state.contextBag,
-                modelChecker: self
-            )
+            var visitor = Visitor(state: state)
 
             logger.trace("Context switch to \(visitor.context.name)")
             do {
                 while !visitor.context.terminated {
-                    logger.trace("\(code[visitor.context.pc]), \(visitor.context)")
+                    logger.trace("  \(code[visitor.context.pc]), \(visitor.context)")
                     try code[visitor.context.pc].accept(&visitor)
                 }
 
+                throw Interrupt.switchPoint
+
             } catch let i as Interrupt {
+                state = visitor.state
+
                 switch i {
                 case .choose(let count):
                     state.contextBag.remove(state.nextContextToRun)
@@ -143,25 +147,7 @@ class StatefulModelChecker {
                         boundary.insert(newState)
                     }
 
-                case .switchPoint(let op):
-                    switch op {
-                    case .atomicInc, .atomicDec:
-                        break
-
-                    case .spawn(eternal: let eternal):
-                        let child = try OpImpl.spawn(parent: &visitor.context, name: "", eternal: eternal)
-                        state.contextBag.add(child)
-
-                    case .load(address: let address):
-                        try OpImpl.load(context: &visitor.context, vars: &state.vars, address: address)
-
-                    case .store(address: let address):
-                        try OpImpl.store(context: &visitor.context, vars: &state.vars, address: address)
-
-                    default:
-                        fatalError()
-                    }
-
+                case .switchPoint:
                     state.contextBag.remove(state.nextContextToRun)
                     state.contextBag.add(visitor.context)
 
