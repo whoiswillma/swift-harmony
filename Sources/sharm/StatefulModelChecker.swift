@@ -7,45 +7,15 @@
 
 class StatefulModelChecker {
 
-    struct State: Hashable {
-
-        static let initialState = State(
-            contextBag: Bag([.initContext]),
-            vars: HDict(),
-            nextContextToRun: .initContext
-        )
-
-        var contextBag: Bag<Context>
-        var vars: HDict
-
-        var nextContextToRun: Context
-
-        var nonterminatedContexts: Set<Context> {
-            contextBag.elements().filter { !$0.terminated }
-        }
-
-        var allTerminated: Bool {
-            nonterminatedContexts.isEmpty
-        }
-
-        var runnable: Set<Context> {
-            let contexts = nonterminatedContexts
-
-            if let context = contexts.first(where: { $0.isAtomic }) {
-                return [context]
-            } else {
-                return contexts
-            }
-        }
-
-    }
-
     enum Interrupt: Error {
         case choose(Int)
         case switchPoint
     }
 
-    struct Visitor: DefaultOpVisitor {
+    struct Visitor: DefaultOpImplVisitor {
+
+        typealias Input = Void
+        typealias Output = Void
 
         var state: State
         var context: Context
@@ -55,7 +25,7 @@ class StatefulModelChecker {
             self.context = state.nextContextToRun
         }
 
-        func choose() throws {
+        func choose(_ input: Void) throws {
             guard case let .set(s) = context.stack.last else {
                 throw OpError.stackTypeMismatch(expected: .set)
             }
@@ -63,7 +33,7 @@ class StatefulModelChecker {
             throw Interrupt.choose(s.count)
         }
 
-        mutating func atomicInc(lazy: Bool) throws {
+        mutating func atomicInc(lazy: Bool, _ input: Void) throws {
             let switchPoint = !context.isAtomic
 
             try OpImpl.atomicInc(context: &context, lazy: lazy)
@@ -73,7 +43,7 @@ class StatefulModelChecker {
             }
         }
 
-        mutating func atomicDec() throws {
+        mutating func atomicDec(_ input: Void) throws {
             try OpImpl.atomicDec(context: &context)
 
             if !context.isAtomic {
@@ -81,22 +51,22 @@ class StatefulModelChecker {
             }
         }
 
-        mutating func nary(nary: Nary) throws {
+        mutating func nary(nary: Nary, _ input: Void) throws {
             try OpImpl.nary(context: &context, contextBag: state.contextBag, nary: nary)
         }
 
-        mutating func spawn(eternal: Bool) throws {
+        mutating func spawn(eternal: Bool, _ input: Void) throws {
             let child = try OpImpl.spawn(parent: &context, name: "", eternal: eternal)
             state.contextBag.add(child)
             throw Interrupt.switchPoint
         }
 
-        mutating func load(address: Value?) throws {
+        mutating func load(address: Value?, _ input: Void) throws {
             try OpImpl.load(context: &context, vars: &state.vars, address: address)
             throw Interrupt.switchPoint
         }
 
-        mutating func store(address: Value?) throws {
+        mutating func store(address: Value?, _ input: Void) throws {
             try OpImpl.store(context: &context, vars: &state.vars, address: address)
             throw Interrupt.switchPoint
         }
@@ -111,9 +81,9 @@ class StatefulModelChecker {
 
     func run() throws {
         var visited: Set<State> = []
-        var boundary: Set<State> = [.initialState]
+        var boundary: [State] = [.initialState]
 
-        while var state = boundary.popFirst() {
+        while var state = boundary.popLast() {
             if visited.contains(state) {
                 continue
             }
@@ -126,7 +96,7 @@ class StatefulModelChecker {
             do {
                 while !visitor.context.terminated {
                     logger.trace("  \(code[visitor.context.pc]), \(visitor.context)")
-                    try code[visitor.context.pc].accept(&visitor)
+                    try code[visitor.context.pc].accept(&visitor, ())
                 }
 
                 throw Interrupt.switchPoint
@@ -144,7 +114,7 @@ class StatefulModelChecker {
                         var newState = state
                         newState.contextBag.add(context)
                         newState.nextContextToRun = context
-                        boundary.insert(newState)
+                        boundary.append(newState)
                     }
 
                 case .switchPoint:
@@ -154,7 +124,7 @@ class StatefulModelChecker {
                     for context in state.runnable {
                         var newState = state
                         newState.nextContextToRun = context
-                        boundary.insert(newState)
+                        boundary.append(newState)
                     }
                 }
             }

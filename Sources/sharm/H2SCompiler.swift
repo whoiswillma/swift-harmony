@@ -38,19 +38,66 @@ class H2SCompiler {
         try writer.write(mainSwift, filename: "main.swift")
     }
 
-    private func generateMainSwift() -> String {
-        generatePreamble()
-        + H2SUtil.generateStepFunction(
-            ops: code,
-            genLine: H2SCompilerLineGenerator(),
-            enableAssertions: genSanityChecks,
-            printContext: genSanityChecks,
-            printVars: genSanityChecks
-        )
-        + generateMain()
+    func generateStepFunction() -> String {
+        let blocks = getBasicBlockStartPCs().sorted().map(getBasicBlock(startPc:))
+
+        var stepFn = """
+        func step(
+            context: inout Context,
+            vars: inout HDict,
+            contextBag: inout Bag<Context>,
+            threadCount: inout Int
+        ) throws {
+            switch context.pc {
+
+        """
+
+        let genLine = H2SCompilerLineGenerator()
+        for block in blocks {
+            stepFn += "    case \(block.pc):\n"
+            for (i, op) in block.ops.enumerated() {
+                if genSanityChecks {
+                    stepFn += ##"""
+                            print(
+                                context.name,
+                                #"\##(op)"#,
+                                "[\(context.stack.map { $0.description }.joined(separator: ", "))]"
+                            )\##n
+                    """##
+                }
+                if genSanityChecks {
+                    stepFn += "        print(context.name, vars)\n"
+                }
+                if genSanityChecks {
+                    stepFn += "        print()\n"
+                }
+                if genSanityChecks {
+                    stepFn += "        assert(context.pc == \(block.pc + i))\n"
+                }
+                let lines = op.accept(genLine, ()).split(separator: "\n")
+                for line in lines {
+                    stepFn += "        \(line)\n"
+                }
+            }
+        }
+
+        stepFn += #"""
+            default:
+                fatalError("pc: \(context.pc)")
+            }
+        }
+
+
+        """#
+
+        return stepFn
     }
 
-    private func generatePreamble() -> String {
+    private func generateMainSwift() -> String {
+        generateStepFunction() + generateMain()
+    }
+
+    private func generateMain() -> String {
         return """
         var vars = HDict()
         var contextBag = Bag<Context>([.initContext])
@@ -73,15 +120,9 @@ class H2SCompiler {
             }
         }
 
-
-        """
-    }
-
-    private func generateMain() -> String {
-        return """
         while let context = getRunnable().randomElement() {
             var newContext = context
-            try step(context: &newContext)
+            try step(context: &newContext, vars: &vars, contextBag: &contextBag, threadCount: &threadCount)
             contextBag.remove(context)
             contextBag.add(newContext)
         }
@@ -89,15 +130,96 @@ class H2SCompiler {
         """
     }
 
+    private func getBasicBlockStartPCs() -> Set<Int> {
+        var startPCs: Set<Int> = [0]
+
+        for (pc, op) in code.enumerated() {
+            switch op {
+            case .frame, .atomicInc, .atomicDec, .load, .store:
+                startPCs.insert(pc)
+
+            case .apply:
+                startPCs.insert(pc + 1)
+
+            case .jumpCond(pc: let newPc, cond: _):
+                startPCs.insert(newPc)
+                startPCs.insert(pc + 1)
+
+            case .jump(pc: let newPc):
+                startPCs.insert(newPc)
+
+            case .push, .sequential, .choose, .storeVar, .loadVar, .address, .nary, .readonlyInc, .readonlyDec,
+                    .assertOp, .delVar, .ret, .spawn, .pop, .cut, .incVar, .dup, .split, .move:
+
+                break
+            }
+        }
+
+        return startPCs
+    }
+
+    private func getBasicBlock(startPc: Int) -> BasicBlock {
+        var basicBlock = [Op]()
+        var pc = startPc
+
+        loop: while pc < code.count {
+            let op = code[pc]
+            let nextOp: Op?
+            if pc < code.count {
+                nextOp = code[pc + 1]
+            } else {
+                nextOp = nil
+            }
+            pc += 1
+
+            switch op {
+            case .address, .assertOp, .choose, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
+                    .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .store, .load, .atomicDec, .atomicInc,
+                    .split, .move:
+
+                basicBlock.append(op)
+
+            case .jumpCond, .ret, .apply, .jump:
+                basicBlock.append(op)
+                break loop
+            }
+
+            switch nextOp {
+            case .load, .store, .atomicInc, .atomicDec:
+                break loop
+
+            case .address, .assertOp, .choose, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
+                    .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .jump, .jumpCond, .ret, .apply, .split,
+                    .move, nil:
+
+                break
+            }
+        }
+
+        return BasicBlock(pc: startPc, ops: basicBlock, endPc: pc)
+    }
+
 }
 
-private struct H2SCompilerLineGenerator: H2SDefaultGenLineVisitor {
+private struct H2SCompilerLineGenerator: H2SDefaultLineGenerator {
 
-    func spawn(eternal: Bool) -> String {
+    func spawn(eternal: Bool, _ input: Void) -> String {
         #"""
         try contextBag.add(OpImpl.spawn(parent: &context, name: "T\(threadCount)", eternal: \#(String(reflecting: eternal))))
         threadCount += 1
         """#
+    }
+
+    func nary(nary: Nary, _ input: Void) -> String {
+        "try OpImpl.nary(context: &context, contextBag: contextBag, nary: \(String(reflecting: nary)))"
+    }
+
+    func load(address: Value?, _ input: Void) -> String {
+        "try OpImpl.load(context: &context, vars: &vars, address: \(String(reflecting: address)))"
+    }
+
+    func store(address: Value?, _ input: Void) -> String {
+        "try OpImpl.store(context: &context, vars: &vars, address: \(String(reflecting: address)))"
     }
 
 }

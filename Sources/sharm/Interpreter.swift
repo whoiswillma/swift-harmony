@@ -10,7 +10,10 @@ private enum InterpreterInterrupt: Error {
     case spawn(Context)
 }
 
-private struct InterpreterOpVisitor: DefaultOpVisitor {
+private struct InterpreterOpVisitor: DefaultOpImplVisitor {
+
+    typealias Input = Void
+    typealias Output = Void
 
     var context: Context
     unowned let interpreter: Interpreter
@@ -20,7 +23,7 @@ private struct InterpreterOpVisitor: DefaultOpVisitor {
         self.interpreter = interpreter
     }
 
-    mutating func atomicInc(lazy: Bool) throws {
+    mutating func atomicInc(lazy: Bool, input: Void) throws {
         try OpImpl.atomicInc(context: &context, lazy: lazy)
 
         if context.isAtomic {
@@ -28,7 +31,7 @@ private struct InterpreterOpVisitor: DefaultOpVisitor {
         }
     }
 
-    mutating func atomicDec() throws {
+    mutating func atomicDec(input: Void) throws {
         try OpImpl.atomicDec(context: &context)
 
         if !context.isAtomic {
@@ -36,21 +39,21 @@ private struct InterpreterOpVisitor: DefaultOpVisitor {
         }
     }
 
-    mutating func choose() throws {
+    mutating func choose(_ input: Void) throws {
         try OpImpl.choose(context: &context, chooseFn: interpreter.nondeterminism.chooseIndex)
     }
 
-    mutating func store(address: Value?) throws {
+    mutating func store(address: Value?, _ input: Void) throws {
         try OpImpl.store(context: &context, vars: &interpreter.vars, address: address)
         throw InterpreterInterrupt.switchPoint
     }
 
-    mutating func load(address: Value?) throws {
+    mutating func load(address: Value?, _ input: Void) throws {
         try OpImpl.load(context: &context, vars: &interpreter.vars, address: address)
         throw InterpreterInterrupt.switchPoint
     }
 
-    mutating func spawn(eternal: Bool) throws {
+    mutating func spawn(eternal: Bool, _ input: Void) throws {
         let child = try OpImpl.spawn(
             parent: &context,
             name: "T\(interpreter.spawnCounter)",
@@ -60,7 +63,7 @@ private struct InterpreterOpVisitor: DefaultOpVisitor {
         throw InterpreterInterrupt.spawn(child)
     }
 
-    mutating func nary(nary: Nary) throws {
+    mutating func nary(nary: Nary, _ input: Void) throws {
         try OpImpl.nary(context: &context, contextBag: interpreter.contextBag, nary: nary)
     }
 
@@ -122,7 +125,7 @@ class Interpreter {
             repeat {
                 do {
                     logger.trace("\(code[visitor.context.pc]), \(visitor.context)")
-                    try code[visitor.context.pc].accept(&visitor)
+                    try code[visitor.context.pc].accept(&visitor, ())
 
                 } catch InterpreterInterrupt.spawn(let context) {
                     self.contextBag.add(context)
