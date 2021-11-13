@@ -39,14 +39,43 @@ class H2SModelChecker {
     }
 
     private func generateMainSwift() -> String {
-        generateBasicBlockStepFunction()
+        generateCodeArray()
+        + generateBasicBlockStepFunction()
         + generateMain()
+    }
+
+    private func generateCodeArray() -> String {
+        """
+        let code = [
+            \(code.map { $0.debugDescription }.joined(separator: ",\n    "))
+        ]
+
+
+        """
     }
 
     private func generateBasicBlockStepFunction() -> String {
         let blocks = getBasicBlockStartPCs().sorted().map(getBasicBlock(startPc:))
 
         var stepFn = """
+
+        func checkSwitchPoint(context: inout Context) throws {
+            switch code[context.pc] {
+                case .load, .store:
+                    if !context.isAtomic {
+                        if context.atomicLevel > 0 {
+                            context.isAtomic = true
+                        }
+                        throw Interrupt.switchPoint
+                    }
+
+                case .frame, .push, .sequential, .choose, .storeVar, .jump, .jumpCond, .loadVar, .address, .nary,
+                        .readonlyInc, .readonlyDec, .assertOp, .delVar, .ret, .spawn, .apply, .pop, .cut, .incVar, .dup,
+                        .split, .move, .atomicInc, .atomicDec:
+                    break
+            }
+        }
+
         func basicBlockStep(
             context: inout Context,
             vars: inout HDict,
@@ -58,23 +87,29 @@ class H2SModelChecker {
 
         let genLine = H2SModelCheckerLineGenerator()
         for block in blocks {
-            stepFn += "    case \(block.pc):\n"
+            stepFn += """
+                    case \(block.pc):
+
+            """
             for op in block.ops {
                 let lines = op.accept(genLine, ()).split(separator: "\n")
                 for line in lines {
-                    stepFn += "        \(line)\n"
+                    stepFn += ##"""
+                                #if DEBUG
+                                print(context.pc, context.stack, #"\##(String(reflecting: op))"#)
+                                #endif
+
+                    """##
+                    stepFn += """
+                                \(line)
+
+                    """
                 }
             }
+            stepFn += """
+                        try checkSwitchPoint(context: &context)
 
-            switch code[block.endPc] {
-            case .atomicInc, .atomicDec, .load, .store:
-                stepFn += "        throw Interrupt.switchPoint\n"
-
-            case .frame, .push, .sequential, .choose, .storeVar, .jump, .jumpCond, .loadVar, .address, .nary,
-                    .readonlyInc, .readonlyDec, .assertOp, .delVar, .ret, .spawn, .apply, .pop, .cut, .incVar, .dup,
-                    .split, .move:
-                break
-            }
+            """
         }
 
         stepFn += #"""
@@ -90,18 +125,24 @@ class H2SModelChecker {
     }
 
     private func generateMain() -> String {
-        return """
+        return #"""
+
         enum Interrupt: Error {
             case choose(Int)
             case switchPoint
         }
 
+        var stutterSteps: Int = 0
         var visited: Set<State> = []
         var boundary: [State] = [.initialState]
 
         while var state = boundary.popLast() {
             if visited.contains(state) {
                 continue
+            }
+
+            if visited.count % 1000 == 0 {
+                print(visited.count, boundary.count)
             }
 
             visited.insert(state)
@@ -118,6 +159,10 @@ class H2SModelChecker {
                 throw Interrupt.switchPoint
 
             } catch let i as Interrupt {
+                #if DEBUG
+                print("Switch point: \(newContext.pc)")
+                #endif
+
                 switch i {
                 case .choose(let count):
                     state.contextBag.remove(state.nextContextToRun)
@@ -131,6 +176,10 @@ class H2SModelChecker {
                         boundary.append(newState)
                     }
 
+                    if count == 1 {
+                        stutterSteps += 1
+                    }
+
                 case .switchPoint:
                     state.contextBag.remove(state.nextContextToRun)
                     state.contextBag.add(newContext)
@@ -140,11 +189,22 @@ class H2SModelChecker {
                         newState.nextContextToRun = context
                         boundary.append(newState)
                     }
+
+                    if state.runnable.count == 1 {
+                        stutterSteps += 1
+                    }
                 }
+            } catch {
+                print("Internal model checker error: \(error)")
+                dump(state)
+                fatalError("\(error)")
             }
         }
 
-        """
+        print("No errors found")
+        print("Total states: \(visited.count)")
+        print("Stutter steps: \(stutterSteps)")
+        """#
     }
 
     private func getBasicBlockStartPCs() -> Set<Int> {
@@ -152,8 +212,11 @@ class H2SModelChecker {
 
         for (pc, op) in code.enumerated() {
             switch op {
-            case .frame, .atomicInc, .atomicDec, .load, .store:
+            case .frame, .atomicInc(lazy: true), .atomicDec, .load, .store:
                 startPCs.insert(pc)
+
+            case .atomicInc(lazy: false):
+                startPCs.insert(pc + 1)
 
             case .apply, .choose:
                 startPCs.insert(pc + 1)
@@ -187,33 +250,31 @@ class H2SModelChecker {
             } else {
                 nextOp = nil
             }
+            basicBlock.append(op)
             pc += 1
 
             switch op {
-            case .address, .assertOp, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
-                    .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .store, .load, .atomicDec, .atomicInc,
-                    .split, .move:
-
-                basicBlock.append(op)
-
-            case .jumpCond, .ret, .apply, .jump, .choose:
-                basicBlock.append(op)
+            case .jumpCond, .ret, .apply, .jump, .choose, .atomicInc(lazy: false):
                 break loop
+
+            case .address, .assertOp, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
+                    .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .store, .load, .atomicDec,
+                    .atomicInc(lazy: true), .split, .move:
+                break
             }
 
             switch nextOp {
-            case .load, .store, .atomicInc, .atomicDec:
+            case .load, .store, .atomicInc(lazy: false), .atomicDec:
                 break loop
 
             case .address, .assertOp, .choose, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
                     .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .jump, .jumpCond, .ret, .apply, .split,
-                    .move, nil:
-
+                    .move, .atomicInc(lazy: true), nil:
                 break
             }
         }
 
-        return BasicBlock(pc: startPc, ops: basicBlock, endPc: pc)
+        return BasicBlock(pc: startPc, ops: basicBlock)
     }
 
 }
@@ -247,6 +308,19 @@ private struct H2SModelCheckerLineGenerator: H2SDefaultLineGenerator {
         guard case let .set(s) = context.stack.last else { throw OpError.stackTypeMismatch(expected: .set) }
         throw Interrupt.choose(s.count)
         """
+    }
+
+    func atomicInc(lazy: Bool, _ input: Void) -> String {
+        if lazy {
+            return """
+            try OpImpl.atomicInc(context: &context, lazy: true)
+            """
+        } else {
+            return """
+            try OpImpl.atomicInc(context: &context, lazy: false)
+            throw Interrupt.switchPoint
+            """
+        }
     }
 
 }

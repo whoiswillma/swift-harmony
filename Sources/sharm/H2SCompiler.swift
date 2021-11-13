@@ -170,18 +170,17 @@ class H2SCompiler {
             } else {
                 nextOp = nil
             }
+            basicBlock.append(op)
             pc += 1
 
             switch op {
+            case .jumpCond, .ret, .apply, .jump:
+                break loop
+
             case .address, .assertOp, .choose, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
                     .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .store, .load, .atomicDec, .atomicInc,
                     .split, .move:
-
-                basicBlock.append(op)
-
-            case .jumpCond, .ret, .apply, .jump:
-                basicBlock.append(op)
-                break loop
+                break
             }
 
             switch nextOp {
@@ -191,12 +190,11 @@ class H2SCompiler {
             case .address, .assertOp, .choose, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
                     .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .jump, .jumpCond, .ret, .apply, .split,
                     .move, nil:
-
                 break
             }
         }
 
-        return BasicBlock(pc: startPc, ops: basicBlock, endPc: pc)
+        return BasicBlock(pc: startPc, ops: basicBlock)
     }
 
 }

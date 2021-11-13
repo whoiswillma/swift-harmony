@@ -55,16 +55,15 @@ struct Context: Hashable {
 
     var stack: [Value]
     var pc: Int
-    var fp: Int // unused?
     var vars: HDict // scoped-storage
-    var atomicLevel: Int
-    var readonlyLevel: Int
+    var atomicLevel: Int = 0
+    var readonlyLevel: Int = 0
 
     var terminated: Bool = false
-    var isAtomic: Bool {
-        atomicLevel > 0
-    }
-    var atomicPc: Int // the pc of an atomicInc in which this context became atomic
+
+    var isAtomic: Bool = false // not the same as atomicLevel > 0 since there is lazy atomic
+    var atomicPc: Int = -1 // the pc of an atomicInc in which this context became atomic
+
     var isReadonly: Bool {
         readonlyLevel > 0
     }
@@ -73,14 +72,10 @@ struct Context: Hashable {
         self.name = name
         self.entry = entry
         self.arg = arg
-
         self.stack = stack
         self.pc = entry
-        self.fp = 0
+
         self.vars = HDict()
-        self.atomicLevel = 0
-        self.atomicPc = -1
-        self.readonlyLevel = 0
     }
 
 }
@@ -93,7 +88,6 @@ extension Context: Comparable {
         && lhs.arg < rhs.arg
         && lhs.stack < rhs.stack
         && lhs.pc < rhs.pc
-        && lhs.fp < rhs.fp
         && lhs.vars < rhs.vars
         && lhs.atomicLevel < rhs.atomicLevel
         && lhs.readonlyLevel < rhs.readonlyLevel

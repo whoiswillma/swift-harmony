@@ -31,8 +31,8 @@ extension Op: CustomDebugStringConvertible {
             return "Op.load(address: \(address.debugDescription))"
         case .address:
             return "Op.address"
-        case .nary(let nary):
-            return "Op.nary(\(String(reflecting: nary)))"
+        case .nary(nary: let nary):
+            return "Op.nary(nary: \(String(reflecting: nary)))"
         case .atomicInc(lazy: let lazy):
             return "Op.atomicInc(lazy: \(lazy))"
         case .atomicDec:
@@ -56,13 +56,13 @@ extension Op: CustomDebugStringConvertible {
         case .cut(setName: let setName, varTree: let varTree):
             return "Op.cut(setName: \(setName.debugDescription), varTree: \(varTree.debugDescription))"
         case .incVar(varName: let varName):
-            return "Op.incVar(varName: \(varName))"
+            return "Op.incVar(varName: \(String(reflecting: varName)))"
         case .dup:
             return "Op.dup"
         case .split(count: let count):
             return "Op.split(count: \(String(reflecting: count)))"
         case .move(offset: let offset):
-            return "Op.move(offset: \(String(reflecting: offset))"
+            return "Op.move(offset: \(String(reflecting: offset)))"
         }
     }
 

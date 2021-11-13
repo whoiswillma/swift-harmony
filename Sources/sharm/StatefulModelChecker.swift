@@ -58,17 +58,23 @@ class StatefulModelChecker {
         mutating func spawn(eternal: Bool, _ input: Void) throws {
             let child = try OpImpl.spawn(parent: &context, name: "", eternal: eternal)
             state.contextBag.add(child)
-            throw Interrupt.switchPoint
+            if !context.isAtomic {
+                throw Interrupt.switchPoint
+            }
         }
 
         mutating func load(address: Value?, _ input: Void) throws {
             try OpImpl.load(context: &context, vars: &state.vars, address: address)
-            throw Interrupt.switchPoint
+            if !context.isAtomic {
+                throw Interrupt.switchPoint
+            }
         }
 
         mutating func store(address: Value?, _ input: Void) throws {
             try OpImpl.store(context: &context, vars: &state.vars, address: address)
-            throw Interrupt.switchPoint
+            if !context.isAtomic {
+                throw Interrupt.switchPoint
+            }
         }
 
     }
@@ -86,6 +92,10 @@ class StatefulModelChecker {
         while var state = boundary.popLast() {
             if visited.contains(state) {
                 continue
+            }
+
+            if visited.count % 1000 == 0 {
+                print(visited.count, boundary.count)
             }
 
             visited.insert(state)

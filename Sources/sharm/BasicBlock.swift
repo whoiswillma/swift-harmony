@@ -10,5 +10,4 @@ import Foundation
 struct BasicBlock {
     let pc: Int
     let ops: [Op]
-    let endPc: Int
 }

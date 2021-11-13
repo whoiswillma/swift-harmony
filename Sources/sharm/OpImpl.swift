@@ -37,7 +37,6 @@ enum OpImpl {
 
         // save the current vars
         context.stack.append(.dict(context.vars))
-        context.stack.append(.int(context.fp))
 
         let valueThis = context.vars[.atom("this")]
         context.vars = HDict()
@@ -45,7 +44,6 @@ enum OpImpl {
 
         try matchVarTree(varTree: params, value: args, vars: &context.vars)
 
-        context.fp = context.stack.count
         context.pc += 1
     }
 
@@ -173,11 +171,6 @@ enum OpImpl {
 
     static func ret(context: inout Context) throws {
         let result = context.vars[.atom("result")] ?? .noneValue
-
-        guard case let .int(originalFp) = context.stack.popLast() else {
-            throw OpError.stackTypeMismatch(expected: .int)
-        }
-        context.fp = originalFp
 
         guard case let .dict(originalVars) = context.stack.popLast() else {
             throw OpError.stackTypeMismatch(expected: .dict)
@@ -381,18 +374,23 @@ enum OpImpl {
     static func atomicInc(context: inout Context, lazy: Bool) throws {
         assert(context.atomicLevel >= 0)
 
-        if !context.isAtomic {
+        if context.atomicLevel == 0 {
             context.atomicPc = context.pc
         }
         context.atomicLevel += 1
+        if !lazy {
+            context.isAtomic = true
+        }
 
         context.pc += 1
     }
 
     static func atomicDec(context: inout Context) throws {
         context.atomicLevel -= 1
-        if !context.isAtomic {
+
+        if context.atomicLevel == 0 {
             context.atomicPc = -1
+            context.isAtomic = false
         }
 
         assert(context.atomicLevel >= 0)
