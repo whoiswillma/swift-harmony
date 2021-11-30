@@ -23,7 +23,7 @@ private struct InterpreterOpVisitor: DefaultOpImplVisitor {
         self.interpreter = interpreter
     }
 
-    mutating func atomicInc(lazy: Bool, input: Void) throws {
+    mutating func atomicInc(lazy: Bool, _ input: Void) throws {
         try OpImpl.atomicInc(context: &context, lazy: lazy)
 
         if context.isAtomic {
@@ -31,7 +31,7 @@ private struct InterpreterOpVisitor: DefaultOpImplVisitor {
         }
     }
 
-    mutating func atomicDec(input: Void) throws {
+    mutating func atomicDec(_ input: Void) throws {
         try OpImpl.atomicDec(context: &context)
 
         if !context.isAtomic {
@@ -104,6 +104,8 @@ class Interpreter {
     }
 
     func run() throws {
+        OpImpl.printEnabled = true
+
         while !allTerminated {
             try step()
         }

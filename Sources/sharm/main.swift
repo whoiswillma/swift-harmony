@@ -8,8 +8,7 @@ enum LogLevel: String, ExpressibleByArgument {
 struct Sharm: ParsableCommand {
 
     static var configuration = CommandConfiguration(
-        subcommands: [Interp.self, SMC.self, Compile.self, CMC.self],
-        defaultSubcommand: Interp.self
+        subcommands: [IE.self, IMC.self, CE.self, CMC.self]
     )
 
 }
@@ -44,7 +43,7 @@ struct Options: ParsableCommand {
 
 extension Sharm {
 
-    struct Interp: ParsableCommand {
+    struct IE: ParsableCommand {
 
         @Flag
         var printHistory: Bool = false
@@ -76,7 +75,7 @@ extension Sharm {
 
     }
 
-    struct SMC: ParsableCommand {
+    struct IMC: ParsableCommand {
 
         @OptionGroup
         var options: Options
@@ -91,16 +90,16 @@ extension Sharm {
 
     }
 
-    struct Compile: ParsableCommand {
+    struct CE: ParsableCommand {
 
         @OptionGroup
         var options: Options
 
         @Option
-        var sharmSourcesDir = FileManager.default.currentDirectoryPath
+        var sharmSourcesDir = "\(FileManager.default.currentDirectoryPath)/Sources"
 
         @Option
-        var outputDir = FileManager.default.currentDirectoryPath
+        var outputDir = "\(FileManager.default.currentDirectoryPath)/sharmcompile"
 
         @Flag
         var dryRun = false
@@ -130,10 +129,10 @@ extension Sharm {
         var options: Options
 
         @Option
-        var sharmSourcesDir = FileManager.default.currentDirectoryPath
+        var sharmSourcesDir = "\(FileManager.default.currentDirectoryPath)/Sources"
 
         @Option
-        var outputDir = FileManager.default.currentDirectoryPath
+        var outputDir = "\(FileManager.default.currentDirectoryPath)/sharmcompile"
 
         @Flag
         var dryRun = false

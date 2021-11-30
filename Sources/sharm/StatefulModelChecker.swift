@@ -86,6 +86,8 @@ class StatefulModelChecker {
     }
 
     func run() throws {
+        OpImpl.printEnabled = false
+
         var visited: Set<State> = []
         var boundary: [State] = [.initialState]
 
@@ -139,6 +141,9 @@ class StatefulModelChecker {
                 }
             }
         }
+
+        print("No errors found")
+        print("Total states: \(visited.count)")
     }
 
 }

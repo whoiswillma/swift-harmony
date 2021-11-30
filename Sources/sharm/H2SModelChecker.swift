@@ -13,6 +13,7 @@ class H2SModelChecker {
     private let sharmSourcesDir: String
     private let writer: H2SUtil.FileWriter
     private let genSanityChecks: Bool
+    private let outputDir: String
 
     init(
         code: [Op],
@@ -25,9 +26,12 @@ class H2SModelChecker {
         self.sharmSourcesDir = sharmSourcesDir
         self.writer = H2SUtil.FileWriter(outputDir: outputDir, dryRun: dryRun)
         self.genSanityChecks = genSanityChecks
+        self.outputDir = outputDir
     }
 
     func run() throws {
+        try FileManager.default.createDirectory(atPath: outputDir, withIntermediateDirectories: true, attributes: nil)
+
         let orderedCollectionsSwift = try H2SUtil.generateOrderedCollectionSwift(sharmSourcesDir: sharmSourcesDir)
         try writer.write(orderedCollectionsSwift, filename: "OrderedCollections.swift")
 
@@ -36,6 +40,13 @@ class H2SModelChecker {
 
         let mainSwift = generateMainSwift()
         try writer.write(mainSwift, filename: "main.swift")
+
+        try writer.write("""
+        swiftc *.swift -o main
+        ./main
+
+        """, filename: "run.sh")
+        try FileManager.default.setAttributes([.posixPermissions:0o777], ofItemAtPath: "\(outputDir)/run.sh")
     }
 
     private func generateMainSwift() -> String {
@@ -61,6 +72,9 @@ class H2SModelChecker {
 
         func checkSwitchPoint(context: inout Context) throws {
             switch code[context.pc] {
+                case .atomicInc(lazy: false):
+                    throw Interrupt.switchPoint
+
                 case .load, .store:
                     if !context.isAtomic {
                         if context.atomicLevel > 0 {
@@ -71,7 +85,7 @@ class H2SModelChecker {
 
                 case .frame, .push, .sequential, .choose, .storeVar, .jump, .jumpCond, .loadVar, .address, .nary,
                         .readonlyInc, .readonlyDec, .assertOp, .delVar, .ret, .spawn, .apply, .pop, .cut, .incVar, .dup,
-                        .split, .move, .atomicInc, .atomicDec:
+                        .split, .move, .atomicInc(lazy: true), .atomicDec:
                     break
             }
         }
@@ -126,6 +140,8 @@ class H2SModelChecker {
 
     private func generateMain() -> String {
         return #"""
+
+        OpImpl.printEnabled = false
 
         enum Interrupt: Error {
             case choose(Int)
@@ -194,8 +210,11 @@ class H2SModelChecker {
                         stutterSteps += 1
                     }
                 }
+
+            } catch let e as OpError {
+                fatalError("Error while model checking: \(e)")
+
             } catch {
-                print("Internal model checker error: \(error)")
                 dump(state)
                 fatalError("\(error)")
             }
@@ -212,11 +231,8 @@ class H2SModelChecker {
 
         for (pc, op) in code.enumerated() {
             switch op {
-            case .frame, .atomicInc(lazy: true), .atomicDec, .load, .store:
+            case .frame, .atomicInc, .atomicDec, .load, .store:
                 startPCs.insert(pc)
-
-            case .atomicInc(lazy: false):
-                startPCs.insert(pc + 1)
 
             case .apply, .choose:
                 startPCs.insert(pc + 1)
@@ -254,12 +270,12 @@ class H2SModelChecker {
             pc += 1
 
             switch op {
-            case .jumpCond, .ret, .apply, .jump, .choose, .atomicInc(lazy: false):
+            case .jumpCond, .ret, .apply, .jump, .choose:
                 break loop
 
             case .address, .assertOp, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
                     .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .store, .load, .atomicDec,
-                    .atomicInc(lazy: true), .split, .move:
+                    .atomicInc, .split, .move:
                 break
             }
 
@@ -308,19 +324,6 @@ private struct H2SModelCheckerLineGenerator: H2SDefaultLineGenerator {
         guard case let .set(s) = context.stack.last else { throw OpError.stackTypeMismatch(expected: .set) }
         throw Interrupt.choose(s.count)
         """
-    }
-
-    func atomicInc(lazy: Bool, _ input: Void) -> String {
-        if lazy {
-            return """
-            try OpImpl.atomicInc(context: &context, lazy: true)
-            """
-        } else {
-            return """
-            try OpImpl.atomicInc(context: &context, lazy: false)
-            throw Interrupt.switchPoint
-            """
-        }
     }
 
 }

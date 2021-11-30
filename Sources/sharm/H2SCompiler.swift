@@ -13,6 +13,7 @@ class H2SCompiler {
     private let sharmSourcesDir: String
     private let writer: H2SUtil.FileWriter
     private let genSanityChecks: Bool
+    private let outputDir: String
 
     init(
         code: [Op],
@@ -25,9 +26,12 @@ class H2SCompiler {
         self.sharmSourcesDir = sharmSourcesDir
         self.writer = H2SUtil.FileWriter(outputDir: outputDir, dryRun: dryRun)
         self.genSanityChecks = genSanityChecks
+        self.outputDir = outputDir
     }
 
     func run() throws {
+        try FileManager.default.createDirectory(atPath: outputDir, withIntermediateDirectories: true, attributes: nil)
+
         let orderedCollectionsSwift = try H2SUtil.generateOrderedCollectionSwift(sharmSourcesDir: sharmSourcesDir)
         try writer.write(orderedCollectionsSwift, filename: "OrderedCollections.swift")
 
@@ -36,6 +40,13 @@ class H2SCompiler {
 
         let mainSwift = generateMainSwift()
         try writer.write(mainSwift, filename: "main.swift")
+
+        try writer.write("""
+        swiftc *.swift -o main
+        ./main
+
+        """, filename: "run.sh")
+        try FileManager.default.setAttributes([.posixPermissions:0o777], ofItemAtPath: "\(outputDir)/run.sh")
     }
 
     func generateStepFunction() -> String {
@@ -99,6 +110,9 @@ class H2SCompiler {
 
     private func generateMain() -> String {
         return """
+
+        OpImpl.printEnabled = true
+
         var vars = HDict()
         var contextBag = Bag<Context>([.initContext])
         var threadCount: Int = 0
