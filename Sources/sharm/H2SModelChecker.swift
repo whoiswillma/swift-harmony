@@ -231,8 +231,12 @@ class H2SModelChecker {
 
         for (pc, op) in code.enumerated() {
             switch op {
-            case .frame, .atomicInc, .atomicDec, .load, .store:
+            case .frame, .atomicDec, .load, .store:
                 startPCs.insert(pc)
+
+            case .atomicInc(lazy: false):
+                startPCs.insert(pc)
+                startPCs.insert(pc + 1)
 
             case .apply, .choose:
                 startPCs.insert(pc + 1)
@@ -245,7 +249,7 @@ class H2SModelChecker {
                 startPCs.insert(newPc)
 
             case .push, .sequential, .storeVar, .loadVar, .address, .nary, .readonlyInc, .readonlyDec,
-                    .assertOp, .delVar, .ret, .spawn, .pop, .cut, .incVar, .dup, .split, .move:
+                    .assertOp, .delVar, .ret, .spawn, .pop, .cut, .incVar, .dup, .split, .move, .atomicInc(lazy: true):
 
                 break
             }
@@ -270,12 +274,12 @@ class H2SModelChecker {
             pc += 1
 
             switch op {
-            case .jumpCond, .ret, .apply, .jump, .choose:
+            case .jumpCond, .ret, .apply, .jump, .choose, .atomicInc(lazy: false):
                 break loop
 
             case .address, .assertOp, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
                     .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .store, .load, .atomicDec,
-                    .atomicInc, .split, .move:
+                    .atomicInc(lazy: true), .split, .move:
                 break
             }
 
@@ -324,6 +328,19 @@ private struct H2SModelCheckerLineGenerator: H2SDefaultLineGenerator {
         guard case let .set(s) = context.stack.last else { throw OpError.stackTypeMismatch(expected: .set) }
         throw Interrupt.choose(s.count)
         """
+    }
+
+    func atomicInc(lazy: Bool, _ input: Void) -> String {
+        if lazy {
+            return """
+            try OpImpl.atomicInc(context: &context, lazy: true)
+            """
+        } else {
+            return """
+            try OpImpl.atomicInc(context: &context, lazy: false)
+            throw Interrupt.switchPoint
+            """
+        }
     }
 
 }
