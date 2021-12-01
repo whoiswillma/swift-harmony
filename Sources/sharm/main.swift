@@ -58,17 +58,23 @@ extension Sharm {
             let nondeterminism = BookkeepingNondeterminism()
             let interpreter = Interpreter(code: code, nondeterminism: nondeterminism)
 
+            var printHistory = printHistory
+            defer {
+                if printHistory {
+                    print("History")
+                    for elem in nondeterminism.history {
+                        switch elem {
+                        case .index(let i, let s): print("\tChose \(i) out of \(s)")
+                        case .context(let i, let s): print("\tChose \(i) out of \(s)")
+                        }
+                    }
+                }
+            }
+
             do {
                 try interpreter.run()
             } catch {
-                print("History")
-                for elem in nondeterminism.history {
-                    switch elem {
-                    case .index(let i, let s): print("\tChose \(i) out of \(s)")
-                    case .context(let i, let s): print("\tChose \(i) out of \(s)")
-                    }
-                }
-
+                printHistory = true
                 throw error
             }
         }
