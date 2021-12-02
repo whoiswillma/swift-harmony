@@ -239,6 +239,9 @@ extension Op: Decodable {
             let offset = try Int(values.decode(String.self, forKey: .offset))!
             self = .move(offset: offset)
 
+        case "Log":
+            self = .log
+
         default:
             fatalError(op)
         }

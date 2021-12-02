@@ -107,4 +107,8 @@ extension DefaultOpImplVisitor {
         try OpImpl.move(context: &context, offset: offset)
     }
 
+    mutating func log(_ input: Input) throws -> Output {
+        try OpImpl.log(context: &context)
+    }
+
 }

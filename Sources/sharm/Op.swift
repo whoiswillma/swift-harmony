@@ -55,5 +55,6 @@ enum Op: Hashable {
     case dup
     case split(count: Int)
     case move(offset: Int)
+    case log
 
 }

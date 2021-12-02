@@ -37,6 +37,7 @@ protocol OpVisitor {
     mutating func dup(_ input: Input) throws -> Output
     mutating func split(count: Int, _ input: Input) throws -> Output
     mutating func move(offset: Int, _ input: Input) throws -> Output
+    mutating func log(_ input: Input) throws -> Output
 
 }
 
@@ -69,6 +70,7 @@ protocol OpFunction: OpVisitor {
     func dup(_ input: Input) -> Output
     func split(count: Int, _ input: Input) -> Output
     func move(offset: Int, _ input: Input) -> Output
+    func log(_ input: Input) -> Output
 
 }
 
@@ -130,6 +132,8 @@ extension Op {
             return try visitor.split(count: count, input)
         case .move(offset: let offset):
             return try visitor.move(offset: offset, input)
+        case .log:
+            return try visitor.log(input)
         }
     }
 
@@ -189,6 +193,8 @@ extension Op {
             return visitor.split(count: count, input)
         case .move(offset: let offset):
             return visitor.move(offset: offset, input)
+        case .log:
+            return visitor.log(input)
         }
     }
 

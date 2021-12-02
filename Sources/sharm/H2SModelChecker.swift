@@ -249,7 +249,8 @@ class H2SModelChecker {
                 startPCs.insert(newPc)
 
             case .push, .sequential, .storeVar, .loadVar, .address, .nary, .readonlyInc, .readonlyDec,
-                    .assertOp, .delVar, .ret, .spawn, .pop, .cut, .incVar, .dup, .split, .move, .atomicInc(lazy: true):
+                    .assertOp, .delVar, .ret, .spawn, .pop, .cut, .incVar, .dup, .split, .move, .atomicInc(lazy: true),
+                    .log:
 
                 break
             }
@@ -279,7 +280,7 @@ class H2SModelChecker {
 
             case .address, .assertOp, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
                     .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .store, .load, .atomicDec,
-                    .atomicInc(lazy: true), .split, .move:
+                    .atomicInc(lazy: true), .split, .move, .log:
                 break
             }
 
@@ -289,7 +290,7 @@ class H2SModelChecker {
 
             case .address, .assertOp, .choose, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
                     .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .jump, .jumpCond, .ret, .apply, .split,
-                    .move, .atomicInc(lazy: true), nil:
+                    .move, .atomicInc(lazy: true), .log, nil:
                 break
             }
         }

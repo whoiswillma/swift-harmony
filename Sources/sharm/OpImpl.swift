@@ -9,8 +9,6 @@ import Foundation
 
 enum OpImpl {
 
-    static var printEnabled = false
-
     private static func matchVarTree(varTree: VarTree, value: Value, vars: inout HDict) throws {
         switch varTree {
         case .name("_"):
@@ -162,10 +160,6 @@ enum OpImpl {
             }
 
             try context.vars.replace(valueAt: indexPath, with: value)
-
-            if OpImpl.printEnabled, indexPath == [.atom("this"), .atom("__print__")] {
-                print(value)
-            }
         }
 
         context.pc += 1
@@ -489,6 +483,14 @@ enum OpImpl {
 
     static func move(context: inout Context, offset: Int) throws {
         context.stack.swapAt(context.stack.count - 1, context.stack.count - offset)
+
+        context.pc += 1
+    }
+
+    static func log(context: inout Context) throws {
+        guard let _ = context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
 
         context.pc += 1
     }

@@ -53,6 +53,16 @@ class H2SCompiler {
         let blocks = getBasicBlockStartPCs().sorted().map(getBasicBlock(startPc:))
 
         var stepFn = """
+
+        func opLog(context: inout Context) throws {
+            guard let value = context.stack.popLast() else {
+                throw OpError.stackIsEmpty
+            }
+
+            print(value.description)
+            context.pc += 1
+        }
+
         func step(
             context: inout Context,
             vars: inout HDict,
@@ -111,8 +121,6 @@ class H2SCompiler {
     private func generateMain() -> String {
         return """
 
-        OpImpl.printEnabled = true
-
         var vars = HDict()
         var contextBag = Bag<Context>([.initContext])
         var threadCount: Int = 0
@@ -163,8 +171,7 @@ class H2SCompiler {
                 startPCs.insert(newPc)
 
             case .push, .sequential, .choose, .storeVar, .loadVar, .address, .nary, .readonlyInc, .readonlyDec,
-                    .assertOp, .delVar, .ret, .spawn, .pop, .cut, .incVar, .dup, .split, .move:
-
+                    .assertOp, .delVar, .ret, .spawn, .pop, .cut, .incVar, .dup, .split, .move, .log:
                 break
             }
         }
@@ -193,7 +200,7 @@ class H2SCompiler {
 
             case .address, .assertOp, .choose, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
                     .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .store, .load, .atomicDec, .atomicInc,
-                    .split, .move:
+                    .split, .move, .log:
                 break
             }
 
@@ -203,7 +210,7 @@ class H2SCompiler {
 
             case .address, .assertOp, .choose, .cut, .delVar, .dup, .frame, .push, .sequential, .storeVar, .loadVar,
                     .nary, .readonlyInc, .readonlyDec, .spawn, .pop, .incVar, .jump, .jumpCond, .ret, .apply, .split,
-                    .move, nil:
+                    .move, .log, nil:
                 break
             }
         }
@@ -232,6 +239,10 @@ private struct H2SCompilerLineGenerator: H2SDefaultLineGenerator {
 
     func store(address: Value?, _ input: Void) -> String {
         "try OpImpl.store(context: &context, vars: &vars, address: \(String(reflecting: address)))"
+    }
+
+    func log(_ input: Void) -> String {
+        "try opLog(context: &context)"
     }
 
 }

@@ -63,6 +63,8 @@ extension Op: CustomDebugStringConvertible {
             return "Op.split(count: \(String(reflecting: count)))"
         case .move(offset: let offset):
             return "Op.move(offset: \(String(reflecting: offset)))"
+        case .log:
+            return "Op.log"
         }
     }
 

@@ -86,8 +86,6 @@ class StatefulModelChecker {
     }
 
     func run() throws {
-        OpImpl.printEnabled = false
-
         var visited: Set<State> = []
         var boundary: [State] = [.initialState]
 

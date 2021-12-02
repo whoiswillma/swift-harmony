@@ -67,6 +67,15 @@ private struct InterpreterOpVisitor: DefaultOpImplVisitor {
         try OpImpl.nary(context: &context, contextBag: interpreter.contextBag, nary: nary)
     }
 
+    mutating func log(_ input: Void) throws -> Void {
+        guard let value = context.stack.popLast() else {
+            throw OpError.stackIsEmpty
+        }
+
+        print(value.description)
+        context.pc += 1
+    }
+
 }
 
 class Interpreter {
@@ -104,8 +113,6 @@ class Interpreter {
     }
 
     func run() throws {
-        OpImpl.printEnabled = true
-
         while !allTerminated {
             try step()
         }

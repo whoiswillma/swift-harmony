@@ -178,4 +178,8 @@ extension H2SDefaultLineGenerator {
         "try OpImpl.move(context: &context, offset: \(String(reflecting: offset)))"
     }
 
+    func log(_ input: Input) -> String {
+        "try OpImpl.log(context: &context)"
+    }
+
 }
