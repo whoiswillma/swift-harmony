@@ -85,7 +85,7 @@ class H2SModelChecker {
 
                 case .frame, .push, .sequential, .choose, .storeVar, .jump, .jumpCond, .loadVar, .address, .nary,
                         .readonlyInc, .readonlyDec, .assertOp, .delVar, .ret, .spawn, .apply, .pop, .cut, .incVar, .dup,
-                        .split, .move, .atomicInc(lazy: true), .atomicDec:
+                        .split, .move, .atomicInc(lazy: true), .atomicDec, .log:
                     break
             }
         }
@@ -140,8 +140,6 @@ class H2SModelChecker {
 
     private func generateMain() -> String {
         return #"""
-
-        OpImpl.printEnabled = false
 
         enum Interrupt: Error {
             case choose(Int)
@@ -223,6 +221,7 @@ class H2SModelChecker {
         print("No errors found")
         print("Total states: \(visited.count)")
         print("Stutter steps: \(stutterSteps)")
+
         """#
     }
 

@@ -245,4 +245,8 @@ private struct H2SCompilerLineGenerator: H2SDefaultLineGenerator {
         "try opLog(context: &context)"
     }
 
+    func atomicInc(lazy: Bool, _ input: Void) -> String {
+        "try OpImpl.atomicInc(context: &context, lazy: false)"
+    }
+
 }

@@ -129,6 +129,18 @@ enum OpImpl {
         case .max:
             try NaryImpl.max(context: &context)
 
+        case .lessThan:
+            try NaryImpl.lessThan(context: &context)
+
+        case .greaterThan:
+            try NaryImpl.greaterThan(context: &context)
+
+        case .lessThanOrEqual:
+            try NaryImpl.lessThanOrEqual(context: &context)
+
+        case .greaterThanOrEqual:
+            try NaryImpl.greaterThanOrEqual(context: &context)
+
         default:
             throw OpError.unimplemented("Nary \(n)")
         }

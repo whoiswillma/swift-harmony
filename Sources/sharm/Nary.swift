@@ -178,6 +178,46 @@ enum NaryImpl {
         context.stack.append(.bool(lhs == rhs))
     }
 
+    static func lessThan(context: inout Context) throws {
+        guard let rhs = context.stack.popLast(),
+              let lhs = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        context.stack.append(.bool(lhs < rhs))
+    }
+
+    static func greaterThan(context: inout Context) throws {
+        guard let rhs = context.stack.popLast(),
+              let lhs = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        context.stack.append(.bool(lhs > rhs))
+    }
+
+    static func lessThanOrEqual(context: inout Context) throws {
+        guard let rhs = context.stack.popLast(),
+              let lhs = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        context.stack.append(.bool(lhs <= rhs))
+    }
+
+    static func greaterThanOrEqual(context: inout Context) throws {
+        guard let rhs = context.stack.popLast(),
+              let lhs = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        context.stack.append(.bool(lhs >= rhs))
+    }
+
     static func range(context: inout Context) throws {
         guard case let .int(rhs) = context.stack.popLast(),
               case let .int(lhs) = context.stack.popLast()

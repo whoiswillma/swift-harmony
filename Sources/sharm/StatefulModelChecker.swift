@@ -19,10 +19,12 @@ class StatefulModelChecker {
 
         var state: State
         var context: Context
+        var insertSwitchPoints: Bool
 
         init(state: State) {
             self.state = state
             self.context = state.nextContextToRun
+            self.insertSwitchPoints = true
         }
 
         func choose(_ input: Void) throws {
@@ -36,9 +38,9 @@ class StatefulModelChecker {
         mutating func atomicInc(lazy: Bool, _ input: Void) throws {
             let switchPoint = !context.isAtomic
 
-            try OpImpl.atomicInc(context: &context, lazy: lazy)
+            try OpImpl.atomicInc(context: &context, lazy: false)
 
-            if switchPoint {
+            if insertSwitchPoints, switchPoint {
                 throw Interrupt.switchPoint
             }
         }
@@ -46,7 +48,7 @@ class StatefulModelChecker {
         mutating func atomicDec(_ input: Void) throws {
             try OpImpl.atomicDec(context: &context)
 
-            if !context.isAtomic {
+            if insertSwitchPoints, !context.isAtomic {
                 throw Interrupt.switchPoint
             }
         }
@@ -56,25 +58,28 @@ class StatefulModelChecker {
         }
 
         mutating func spawn(eternal: Bool, _ input: Void) throws {
-            let child = try OpImpl.spawn(parent: &context, name: "", eternal: eternal)
+            let child = try OpImpl.spawn(parent: &context, name: "T\(state.contextBag.count)", eternal: eternal)
             state.contextBag.add(child)
-            if !context.isAtomic {
+
+            if insertSwitchPoints, !context.isAtomic {
                 throw Interrupt.switchPoint
             }
         }
 
         mutating func load(address: Value?, _ input: Void) throws {
-            try OpImpl.load(context: &context, vars: &state.vars, address: address)
-            if !context.isAtomic {
+            if insertSwitchPoints, !context.isAtomic {
                 throw Interrupt.switchPoint
             }
+
+            try OpImpl.load(context: &context, vars: &state.vars, address: address)
         }
 
         mutating func store(address: Value?, _ input: Void) throws {
-            try OpImpl.store(context: &context, vars: &state.vars, address: address)
-            if !context.isAtomic {
+            if insertSwitchPoints, !context.isAtomic {
                 throw Interrupt.switchPoint
             }
+
+            try OpImpl.store(context: &context, vars: &state.vars, address: address)
         }
 
     }
@@ -101,12 +106,14 @@ class StatefulModelChecker {
             visited.insert(state)
             assert(state.contextBag.contains(state.nextContextToRun))
             var visitor = Visitor(state: state)
+            visitor.insertSwitchPoints = false
 
             logger.trace("Context switch to \(visitor.context.name)")
             do {
                 while !visitor.context.terminated {
-                    logger.trace("  \(code[visitor.context.pc]), \(visitor.context)")
                     try code[visitor.context.pc].accept(&visitor, ())
+                    logger.trace("  \(code[visitor.context.pc]), \(visitor.context)")
+                    visitor.insertSwitchPoints = true
                 }
 
                 throw Interrupt.switchPoint

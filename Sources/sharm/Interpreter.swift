@@ -24,7 +24,7 @@ private struct InterpreterOpVisitor: DefaultOpImplVisitor {
     }
 
     mutating func atomicInc(lazy: Bool, _ input: Void) throws {
-        try OpImpl.atomicInc(context: &context, lazy: lazy)
+        try OpImpl.atomicInc(context: &context, lazy: false)
 
         if context.isAtomic {
             throw InterpreterInterrupt.switchPoint
