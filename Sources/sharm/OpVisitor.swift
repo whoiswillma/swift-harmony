@@ -32,7 +32,7 @@ protocol OpVisitor {
     mutating func spawn(eternal: Bool, _ input: Input) throws -> Output
     mutating func apply(_ input: Input) throws -> Output
     mutating func pop(_ input: Input) throws -> Output
-    mutating func cut(setName: String, varTree: VarTree, _ input: Input) throws -> Output
+    mutating func cut(setName: String, key: VarTree?, value: VarTree, _ input: Input) throws -> Output
     mutating func incVar(varName: String, _ input: Input) throws -> Output
     mutating func dup(_ input: Input) throws -> Output
     mutating func split(count: Int, _ input: Input) throws -> Output
@@ -65,7 +65,7 @@ protocol OpFunction: OpVisitor {
     func spawn(eternal: Bool, _ input: Input) -> Output
     func apply(_ input: Input) -> Output
     func pop(_ input: Input) -> Output
-    func cut(setName: String, varTree: VarTree, _ input: Input) -> Output
+    func cut(setName: String, key: VarTree?, value: VarTree, _ input: Input) -> Output
     func incVar(varName: String, _ input: Input) -> Output
     func dup(_ input: Input) -> Output
     func split(count: Int, _ input: Input) -> Output
@@ -116,8 +116,8 @@ extension Op {
             return try visitor.delVar(varName: varName, input)
         case .ret:
             return try visitor.ret(input)
-        case .cut(let set, let value):
-            return try visitor.cut(setName: set, varTree: value, input)
+        case .cut(let set, let key, let value):
+            return try visitor.cut(setName: set, key: key, value: value, input)
         case .spawn(eternal: let eternal):
             return try visitor.spawn(eternal: eternal, input)
         case .apply:
@@ -177,8 +177,8 @@ extension Op {
             return visitor.delVar(varName: varName, input)
         case .ret:
             return visitor.ret(input)
-        case .cut(let set, let value):
-            return visitor.cut(setName: set, varTree: value, input)
+        case .cut(let set, let key, let value):
+            return visitor.cut(setName: set, key: key, value: value, input)
         case .spawn(eternal: let eternal):
             return visitor.spawn(eternal: eternal, input)
         case .apply:

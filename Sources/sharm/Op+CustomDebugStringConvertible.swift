@@ -53,8 +53,8 @@ extension Op: CustomDebugStringConvertible {
             return "Op.apply"
         case .pop:
             return "Op.pop"
-        case .cut(setName: let setName, varTree: let varTree):
-            return "Op.cut(setName: \(setName.debugDescription), varTree: \(varTree.debugDescription))"
+        case .cut(setName: let setName, key: let key, value: let value):
+            return "Op.cut(setName: \(setName.debugDescription), key: \(key.debugDescription), value: \(value.debugDescription))"
         case .incVar(varName: let varName):
             return "Op.incVar(varName: \(String(reflecting: varName)))"
         case .dup:

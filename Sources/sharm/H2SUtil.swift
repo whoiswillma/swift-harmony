@@ -158,8 +158,8 @@ extension H2SDefaultLineGenerator {
         "try OpImpl.pop(context: &context)"
     }
 
-    func cut(setName: String, varTree: VarTree, _ input: Input) -> String {
-        "try OpImpl.cut(context: &context, setName: \(String(reflecting: setName)), varTree: \(String(reflecting: varTree)))"
+    func cut(setName: String, key: VarTree?, value: VarTree, _ input: Input) -> String {
+        "try OpImpl.cut(context: &context, setName: \(String(reflecting: setName)), key: \(String(reflecting: key)), value: \(String(reflecting: value)))"
     }
 
     func incVar(varName: String, _ input: Input) -> String {

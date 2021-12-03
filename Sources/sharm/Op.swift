@@ -50,7 +50,7 @@ enum Op: Hashable {
     case spawn(eternal: Bool)
     case apply
     case pop
-    case cut(setName: String, varTree: VarTree)
+    case cut(setName: String, key: VarTree?, value: VarTree)
     case incVar(varName: String)
     case dup
     case split(count: Int)

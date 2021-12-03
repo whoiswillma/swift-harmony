@@ -87,8 +87,8 @@ extension DefaultOpImplVisitor {
         try OpImpl.assertOp(context: &context)
     }
 
-    mutating func cut(setName: String, varTree: VarTree, _ input: Input) throws {
-        try OpImpl.cut(context: &context, setName: setName, varTree: varTree)
+    mutating func cut(setName: String, key: VarTree?, value: VarTree, _ input: Input) throws {
+        try OpImpl.cut(context: &context, setName: setName, key: key, value: value)
     }
 
     mutating func incVar(varName: String, _ input: Input) throws {

@@ -141,6 +141,12 @@ enum OpImpl {
         case .greaterThanOrEqual:
             try NaryImpl.greaterThanOrEqual(context: &context)
 
+        case .setAdd:
+            try NaryImpl.setAdd(context: &context)
+
+        case .keys:
+            try NaryImpl.keys(context: &context)
+
         default:
             throw OpError.unimplemented("Nary \(n)")
         }
@@ -430,18 +436,37 @@ enum OpImpl {
         return context
     }
 
-    static func cut(context: inout Context, setName: String, varTree: VarTree) throws {
-        guard case var .set(set) = context.vars[.atom(setName)] else {
-            throw OpError.varTypeMismatch(varName: setName, expected: .set)
+    static func cut(context: inout Context, setName: String, key keyTree: VarTree?, value valueTree: VarTree) throws {
+        guard let value = context.vars[.atom(setName)] else {
+            throw OpError.unknownVar(varName: setName)
         }
 
-        guard let min = set.min() else {
-            throw OpError.setIsEmpty
-        }
+        switch value {
+        case var .set(set):
+            guard let min = set.min() else {
+                throw OpError.setIsEmpty
+            }
 
-        set.remove(min)
-        context.vars[.atom(setName)] = .set(set)
-        try matchVarTree(varTree: varTree, value: min, vars: &context.vars)
+            set.remove(min)
+            context.vars[.atom(setName)] = .set(set)
+            try matchVarTree(varTree: valueTree, value: min, vars: &context.vars)
+
+        case var .dict(dict):
+            guard let (minKey, minValue) = dict.elements.min(by: { $0.1 < $1.1 }) else {
+                throw OpError.dictIsEmpty
+            }
+
+            dict.removeValue(forKey: minKey)
+            context.vars[.atom(setName)] = .dict(dict)
+            try matchVarTree(varTree: valueTree, value: minValue, vars: &context.vars)
+            if let keyTree = keyTree {
+                try matchVarTree(varTree: keyTree, value: minKey, vars: &context.vars)
+            }
+
+
+        default:
+            throw OpError.typeMismatch(expected: [.set, .dict], actual: [value.type])
+        }
 
         context.pc += 1
     }
@@ -452,6 +477,7 @@ enum OpImpl {
         }
 
         context.vars[.atom(varName)] = .int(i + 1)
+        context.pc += 1
     }
 
     static func dup(context: inout Context) throws {

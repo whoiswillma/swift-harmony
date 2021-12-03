@@ -20,6 +20,7 @@ extension Op {
         case set
         case count
         case offset
+        case key
     }
 
 }
@@ -221,8 +222,9 @@ extension Op: Decodable {
 
         case "Cut":
             let set = try values.decode(String.self, forKey: .set)
+            let key = try values.decodeIfPresent(String.self, forKey: .key)
             let value = try values.decode(String.self, forKey: .value)
-            self = .cut(setName: set, varTree: VarTree(string: value)!)
+            self = .cut(setName: set, key: key.flatMap { VarTree(string: $0) }, value: VarTree(string: value)!)
 
         case "IncVar":
             let varName = try values.decode(String.self, forKey: .value)

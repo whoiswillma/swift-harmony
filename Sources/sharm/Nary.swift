@@ -77,6 +77,12 @@ enum NaryImpl {
         case let (.int(lhs), .int(rhs)):
             result = .int(lhs + rhs)
 
+        case let (.dict(lhs), .dict(rhs)):
+            let values: [Value] = Array(lhs.values) + Array(rhs.values)
+            result = .dict(OrderedDictionary(uniqueKeysWithValues: values.enumerated().map {
+                (key: .int($0), value: $1)
+            }))
+
         default:
             throw OpError.typeMismatch(expected: [.int], actual: [lhs.type, rhs.type])
         }
@@ -95,6 +101,11 @@ enum NaryImpl {
         switch (lhs, rhs) {
         case let (.int(lhs), .int(rhs)):
             result = .int(lhs - rhs)
+
+        case let (.set(lhs), .set(rhs)):
+            var newSet = lhs
+            newSet.removeAll(where: rhs.contains)
+            result = .set(newSet)
 
         default:
             throw OpError.typeMismatch(expected: [.int], actual: [lhs.type, rhs.type])
@@ -225,8 +236,12 @@ enum NaryImpl {
             throw OpError.stackTypeMismatch(expected: .int)
         }
 
-        let set = HSet((lhs...rhs).map { .int($0) })
-        context.stack.append(.set(set))
+        if lhs > rhs {
+            context.stack.append(.set([]))
+        } else {
+            let set = HSet((lhs...rhs).map { .int($0) })
+            context.stack.append(.set(set))
+        }
     }
 
     static func isEmpty(context: inout Context) throws {
@@ -410,6 +425,14 @@ enum NaryImpl {
         default:
             throw OpError.typeMismatch(expected: [.set, .dict], actual: [value.type])
         }
+    }
+
+    static func keys(context: inout Context) throws {
+        guard case let .dict(value) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .dict)
+        }
+
+        context.stack.append(.set(OrderedSet(value.keys.sorted())))
     }
 
 }
