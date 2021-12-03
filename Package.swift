@@ -6,10 +6,6 @@ import PackageDescription
 let package = Package(
     name: "sharm",
     dependencies: [
-//        .package(
-//            url: "https://github.com/apple/swift-collections.git",
-//            .upToNextMajor(from: "1.0.0")
-//        ),
         .package(
             url: "https://github.com/apple/swift-log.git",
             from: "1.0.0"
@@ -25,10 +21,13 @@ let package = Package(
         .executableTarget(
             name: "sharm",
             dependencies: [
-//                .product(name: "Collections", package: "swift-collections"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
+        ),
+        .executableTarget(
+            name: "sharmcompile",
+            exclude: ["run.sh"]
         ),
         .testTarget(
             name: "sharmTests",

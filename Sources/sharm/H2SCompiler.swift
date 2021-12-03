@@ -66,7 +66,7 @@ class H2SCompiler {
         func step(
             context: inout Context,
             vars: inout HDict,
-            contextBag: inout Bag<Context>,
+            contextArray: inout [Context],
             threadCount: inout Int
         ) throws {
             switch context.pc {
@@ -122,31 +122,27 @@ class H2SCompiler {
         return """
 
         var vars = HDict()
-        var contextBag = Bag<Context>([.initContext])
+        var contextArray: [Context] = [.initContext]
         var threadCount: Int = 0
 
-        func nonterminatedContexts() -> Set<Context> {
-            contextBag.elements().filter { !$0.terminated }
-        }
-
-        func getRunnable() -> [Context] {
-            let contexts = nonterminatedContexts()
-
-            let atomicContexts = contexts.filter { $0.isAtomic }
-            assert(atomicContexts.count <= 1)
-
-            if let context = atomicContexts.first {
-                return [context]
-            } else {
-                return contexts.sorted(by: { $0.name < $1.name })
+        func getRunnable() -> [Int] {
+            var nonterminated: [Int] = []
+            for i in 0..<contextArray.count {
+                let context = contextArray[i]
+                if !context.terminated {
+                    if context.isAtomic {
+                        return [i]
+                    }
+                    nonterminated.append(i)
+                }
             }
+            return nonterminated
         }
 
-        while let context = getRunnable().randomElement() {
-            var newContext = context
-            try step(context: &newContext, vars: &vars, contextBag: &contextBag, threadCount: &threadCount)
-            contextBag.remove(context)
-            contextBag.add(newContext)
+        while let index = getRunnable().randomElement() {
+            var newContext = contextArray[index]
+            try step(context: &newContext, vars: &vars, contextArray: &contextArray, threadCount: &threadCount)
+            contextArray[index] = newContext
         }
 
         """
@@ -224,13 +220,13 @@ private struct H2SCompilerLineGenerator: H2SDefaultLineGenerator {
 
     func spawn(eternal: Bool, _ input: Void) -> String {
         #"""
-        try contextBag.add(OpImpl.spawn(parent: &context, name: "T\(threadCount)", eternal: \#(String(reflecting: eternal))))
+        try contextArray.append(OpImpl.spawn(parent: &context, name: "T\(threadCount)", eternal: \#(String(reflecting: eternal))))
         threadCount += 1
         """#
     }
 
     func nary(nary: Nary, _ input: Void) -> String {
-        "try OpImpl.nary(context: &context, contextBag: contextBag, nary: \(String(reflecting: nary)))"
+        "try OpImpl.nary(context: &context, contextArray: contextArray, nary: \(String(reflecting: nary)))"
     }
 
     func load(address: Value?, _ input: Void) -> String {

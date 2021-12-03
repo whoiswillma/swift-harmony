@@ -47,7 +47,7 @@ extension Array: Comparable where Element: Comparable {
 
 }
 
-struct Context: Hashable {
+struct Context {
 
     let name: String
     let entry: Int
@@ -76,6 +76,22 @@ struct Context: Hashable {
         self.pc = entry
 
         self.vars = HDict()
+    }
+
+}
+
+extension Context: Hashable {
+
+    func hash(into hasher: inout Hasher) {
+        name.hash(into: &hasher)
+        entry.hash(into: &hasher)
+        arg.hash(into: &hasher)
+        pc.hash(into: &hasher)
+        atomicLevel.hash(into: &hasher)
+        readonlyLevel.hash(into: &hasher)
+        terminated.hash(into: &hasher)
+        isAtomic.hash(into: &hasher)
+        atomicPc.hash(into: &hasher)
     }
 
 }

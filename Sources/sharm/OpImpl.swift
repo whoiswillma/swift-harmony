@@ -90,8 +90,8 @@ enum OpImpl {
 
     static func nary(context: inout Context, nary n: Nary) throws {
         switch n {
-        case .plus:
-            try NaryImpl.plus(context: &context)
+        case .plus(arity: let arity):
+            try NaryImpl.plus(context: &context, arity: arity)
 
         case .minus:
             try NaryImpl.minus(context: &context)
@@ -152,6 +152,16 @@ enum OpImpl {
         }
 
         context.pc += 1
+    }
+
+    static func nary(context: inout Context, contextArray: [Context], nary n: Nary) throws {
+        switch n {
+        case .atLabel:
+            try NaryImpl.atLabel(context: &context, contextArray: contextArray)
+
+        default:
+            try nary(context: &context, nary: n)
+        }
     }
 
     static func nary(context: inout Context, contextBag: Bag<Context>, nary n: Nary) throws {
@@ -462,7 +472,6 @@ enum OpImpl {
             if let keyTree = keyTree {
                 try matchVarTree(varTree: keyTree, value: minKey, vars: &context.vars)
             }
-
 
         default:
             throw OpError.typeMismatch(expected: [.set, .dict], actual: [value.type])

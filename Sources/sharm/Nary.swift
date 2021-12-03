@@ -65,7 +65,7 @@ enum Nary: Hashable {
 
 enum NaryImpl {
 
-    static func plus(context: inout Context) throws {
+    private static func plusBinary(context: inout Context) throws {
         guard let rhs = context.stack.popLast(),
               let lhs = context.stack.popLast()
         else {
@@ -88,6 +88,12 @@ enum NaryImpl {
         }
 
         context.stack.append(result)
+    }
+
+    static func plus(context: inout Context, arity: Int) throws {
+        for _ in 1..<arity {
+            try plusBinary(context: &context)
+        }
     }
 
     static func minus(context: inout Context) throws {
@@ -127,6 +133,35 @@ enum NaryImpl {
         }
 
         context.stack.append(result)
+    }
+
+    static func atLabel(context: inout Context, contextArray: [Context]) throws {
+        struct ResultKey: Hashable {
+            let entry: Int
+            let arg: Value
+        }
+
+        guard context.isAtomic else {
+            throw OpError.contextIsNotAtomic
+        }
+
+        guard case let .pc(pc) = context.stack.popLast() else {
+            throw OpError.stackTypeMismatch(expected: .pc)
+        }
+
+        var result = [ResultKey: Int]()
+        for context in contextArray {
+            if context.atomicPc == pc {
+                result[ResultKey(entry: context.entry, arg: context.arg), default: 0] += 1
+            }
+        }
+
+        let value = Value.dict(HDict(uniqueKeysWithValues: result.map({ resultKey, count in
+            (.dict([.int(0): .pc(resultKey.entry), .int(1): resultKey.arg]), .int(count))
+        })))
+
+        context.stack.append(value)
+        context.pc += 1
     }
 
     static func atLabel(context: inout Context, contextBag: Bag<Context>) throws {

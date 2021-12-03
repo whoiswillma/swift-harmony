@@ -20,7 +20,7 @@ struct State: Hashable {
 
     var nextContextToRun: Context
 
-    var nonterminatedContexts: Set<Context> {
+    var nonterminatedContexts: [Context] {
         contextBag.elements().filter { !$0.terminated }
     }
 
@@ -28,7 +28,7 @@ struct State: Hashable {
         nonterminatedContexts.isEmpty
     }
 
-    var runnable: Set<Context> {
+    var runnable: [Context] {
         let contexts = nonterminatedContexts
 
         if let context = contexts.first(where: { $0.isAtomic }) {
