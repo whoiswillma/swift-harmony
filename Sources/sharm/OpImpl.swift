@@ -288,7 +288,7 @@ enum OpImpl {
             throw OpError.stackTypeMismatch(expected: .set)
         }
 
-        let chosen = value.elements[try chooseFn(value)]
+        let chosen = value[value.index(value.startIndex, offsetBy: try chooseFn(value))]
         context.stack.append(chosen)
 
         context.pc += 1
@@ -462,11 +462,12 @@ enum OpImpl {
             try matchVarTree(varTree: valueTree, value: min, vars: &context.vars)
 
         case var .dict(dict):
-            guard let (minKey, minValue) = dict.elements.min(by: { $0.1 < $1.1 }) else {
+            guard let (minKey, minValue) = dict.first else {
                 throw OpError.dictIsEmpty
             }
 
-            dict.removeValue(forKey: minKey)
+            dict.removeFirst()
+
             context.vars[.atom(setName)] = .dict(dict)
             try matchVarTree(varTree: valueTree, value: minValue, vars: &context.vars)
             if let keyTree = keyTree {
@@ -508,7 +509,7 @@ enum OpImpl {
                 throw OpError.wrongCountSplit(actual: dict.count, expected: count)
             }
 
-            for i in dict.elements {
+            for i in dict {
                 context.stack.append(i.value)
             }
 
@@ -517,7 +518,7 @@ enum OpImpl {
                 throw OpError.wrongCountSplit(actual: set.count, expected: count)
             }
 
-            for i in set.elements {
+            for i in set {
                 context.stack.append(i)
             }
 
@@ -555,7 +556,7 @@ private extension HDict {
             return copy
         } else {
             guard let index = index(forKey: indexPath[0]) else { return nil }
-            guard case let .dict(dict) = elements[index].value else { return nil }
+            guard case let .dict(dict) = self[index].value else { return nil }
             guard let result = dict.replacing(valueAt: Array(indexPath[1...]), with: value) else { return nil }
             var copy = self
             copy.values[index] = .dict(result)

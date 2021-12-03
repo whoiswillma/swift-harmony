@@ -79,7 +79,7 @@ enum NaryImpl {
 
         case let (.dict(lhs), .dict(rhs)):
             let values: [Value] = Array(lhs.values) + Array(rhs.values)
-            result = .dict(OrderedDictionary(uniqueKeysWithValues: values.enumerated().map {
+            result = .dict(SortedDictionary(keysWithValues: values.enumerated().map {
                 (key: .int($0), value: $1)
             }))
 
@@ -110,7 +110,11 @@ enum NaryImpl {
 
         case let (.set(lhs), .set(rhs)):
             var newSet = lhs
-            newSet.removeAll(where: rhs.contains)
+            for elem in newSet {
+                if rhs.contains(elem) {
+                    newSet.remove(elem)
+                }
+            }
             result = .set(newSet)
 
         default:
@@ -156,7 +160,7 @@ enum NaryImpl {
             }
         }
 
-        let value = Value.dict(HDict(uniqueKeysWithValues: result.map({ resultKey, count in
+        let value = Value.dict(HDict(keysWithValues: result.map({ resultKey, count in
             (.dict([.int(0): .pc(resultKey.entry), .int(1): resultKey.arg]), .int(count))
         })))
 
@@ -185,7 +189,7 @@ enum NaryImpl {
             }
         }
 
-        let value = Value.dict(HDict(uniqueKeysWithValues: result.map({ resultKey, count in
+        let value: Value = .dict(HDict(keysWithValues: result.map({ resultKey, count in
             (.dict([.int(0): .pc(resultKey.entry), .int(1): resultKey.arg]), .int(count))
         })))
 
@@ -332,10 +336,8 @@ enum NaryImpl {
 
         if set.contains(value) {
             return
-        } else if let index = set.elements.firstIndex(where: { value < $0 }) {
-            set.insert(value, at: index)
         } else {
-            set.append(value)
+            set.insert(value)
         }
 
         context.stack.append(.set(set))
@@ -467,7 +469,7 @@ enum NaryImpl {
             throw OpError.stackTypeMismatch(expected: .dict)
         }
 
-        context.stack.append(.set(OrderedSet(value.keys.sorted())))
+        context.stack.append(.set(HSet(value.keys.sorted())))
     }
 
 }

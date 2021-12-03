@@ -35,6 +35,9 @@ class H2SCompiler {
         let orderedCollectionsSwift = try H2SUtil.generateOrderedCollectionSwift(sharmSourcesDir: sharmSourcesDir)
         try writer.write(orderedCollectionsSwift, filename: "OrderedCollections.swift")
 
+        let sortedCollectionsSwift = try H2SUtil.generateSortedCollectionSwift(sharmSourcesDir: sharmSourcesDir)
+        try writer.write(sortedCollectionsSwift, filename: "SortedCollections.swift")
+
         let sharmSwift = try H2SUtil.generateSharmSwift(sharmSourcesDir: sharmSourcesDir)
         try writer.write(sharmSwift, filename: "Sharm.swift")
 

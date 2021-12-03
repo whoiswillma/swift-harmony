@@ -55,6 +55,17 @@ extension H2SUtil {
         return contents
     }
 
+    static func generateSortedCollectionSwift(sharmSourcesDir: String) throws -> String {
+        let sortedCollectionSwift = "\(sharmSourcesDir)/sharm/SortedCollections"
+
+        let includes = try findSwiftFiles(in: sortedCollectionSwift)
+        var contents = String()
+        for include in includes {
+            contents += try String(contentsOfFile: include)
+        }
+        return contents
+    }
+
 }
 
 extension H2SUtil {

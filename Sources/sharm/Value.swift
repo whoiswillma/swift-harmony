@@ -5,28 +5,24 @@
 //  Created by William Ma on 10/26/21.
 //
 
-typealias HDict = OrderedDictionary<Value, Value>
+typealias HDict = SortedDictionary<Value, Value>
 
 extension HDict: Comparable {
 
-    public static func < (lhs: OrderedDictionary<Key, Value>, rhs: OrderedDictionary<Key, Value>) -> Bool {
+    public static func < (lhs: SortedDictionary<Key, Value>, rhs: SortedDictionary<Key, Value>) -> Bool {
         lhs.lexicographicallyPrecedes(rhs) { lhs, rhs in
-            if lhs.key < rhs.key {
-                return true
-            } else {
-                return lhs.value < rhs.value
-            }
+            lhs.key < rhs.key || lhs.value < rhs.value
         }
     }
 
 }
 
-typealias HSet = OrderedSet<Value>
+typealias HSet = SortedSet<Value>
 
 extension HSet: Comparable {
 
-    public static func < (lhs: OrderedSet<Element>, rhs: OrderedSet<Element>) -> Bool {
-        lhs.elements.lexicographicallyPrecedes(rhs.elements)
+    public static func < (lhs: SortedSet<Element>, rhs: SortedSet<Element>) -> Bool {
+        lhs.lexicographicallyPrecedes(rhs)
     }
 
 }
@@ -321,7 +317,7 @@ extension Value: Encodable {
 
         case .set(let set):
             try values.encode("set", forKey: .type)
-            try values.encode(set.elements, forKey: .value)
+            try values.encode(Array(set), forKey: .value)
 
         case .context:
             fatalError()
@@ -359,7 +355,7 @@ extension Value: CustomDebugStringConvertible {
             if value.isEmpty {
                 return "Value.dict([:])"
             } else {
-                return "Value.dict([\(value.elements.map { "\($0.debugDescription): \($1.debugDescription)" }.joined(separator: ", "))])"
+                return "Value.dict([\(value.map { "\($0.debugDescription): \($1.debugDescription)" }.joined(separator: ", "))])"
             }
         case .address(let indexPath): return "Value.address(\(indexPath))"
         case .pc(let value): return "Value.pc(\(value))"
