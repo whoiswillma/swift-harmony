@@ -9,14 +9,14 @@ def diner(which):
         # Give 1/6 chance of stopping
         while choose({ 1..6 }) < 6:
             acquire(?forks[left])
-            log (which, .acquire, left)
+            print (which, .acquire, left)
             acquire(?forks[right])
-            log (which, .acquire, right)
+            print (which, .acquire, right)
 
             release(?forks[left])
-            log (which, .release, left)
+            print (which, .release, left)
             release(?forks[right])
-            log (which, .release, right)
+            print (which, .release, right)
 
 for i in {0..N-1}:
     spawn diner(i)
