@@ -1,0 +1,25 @@
+def binary_search_rec(arr, val, l, r):
+    let m = (l + r) / 2:
+        if arr[m] == val:
+            result = m
+        elif val < arr[m]:
+            result = binary_search_rec(arr, val, l, m)
+        else:
+            result = binary_search_rec(arr, val, m + 1, r)
+
+
+def binary_search(arr, val):
+    result = binary_search_rec(arr, val, 0, len(arr))
+
+
+const N = 10
+arr = [i for i in { 0..N-1 }]
+values = { 0..N-1 }
+
+while len(values) != 0:
+    print len(values)
+    let x = choose(values):
+        values -= {x}
+        let i = binary_search(arr, x):
+            assert i == x
+

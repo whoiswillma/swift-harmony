@@ -1,0 +1,22 @@
+import list
+
+N = 7
+arr = []
+elems = {0..N-1}
+
+for _ in {1..N}:
+    let val = choose(elems):
+        arr += [val,]
+        elems -= {val}
+        
+
+def quick_sort():
+    result = list.sorted(arr)
+
+
+arr = quick_sort()
+print arr
+
+for i in {0..N-1}:
+    assert ((i - 1) < 0) or (arr[i - 1] < arr[i])
+
