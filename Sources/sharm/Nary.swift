@@ -31,6 +31,7 @@ enum Nary: Hashable {
     case getContext
     case times(arity: Int)
     case mod
+    case divide
 
     var arity: Int {
         switch self {
@@ -58,6 +59,7 @@ enum Nary: Hashable {
         case .notEquals: return 2
         case .times(arity: let arity): return arity
         case .mod: return 2
+        case .divide: return 2
         }
     }
 
@@ -472,6 +474,23 @@ enum NaryImpl {
         context.stack.append(.set(HSet(value.keys.sorted())))
     }
 
+    static func divide(context: inout Context) throws {
+        guard let rhs = context.stack.popLast(),
+              let lhs = context.stack.popLast()
+        else {
+            throw OpError.stackIsEmpty
+        }
+
+        let result: Value
+        switch (lhs, rhs) {
+        case let (.int(lhs), .int(rhs)):
+            result = .int(lhs / rhs)
+        default:
+            throw OpError.typeMismatch(expected: [.int, .int], actual: [lhs.type, rhs.type])
+        }
+        context.stack.append(result)
+    }
+
 }
 
 extension Nary: CustomDebugStringConvertible {
@@ -526,6 +545,8 @@ extension Nary: CustomDebugStringConvertible {
             return "Nary.times(arity: \(arity))"
         case .mod:
             return "Nary.mod"
+        case .divide:
+            return "Nary.divide"
         }
     }
 

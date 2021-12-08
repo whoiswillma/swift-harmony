@@ -139,6 +139,9 @@ extension Op: Decodable {
             case "%":
                 nary = .mod
 
+            case "/":
+                nary = .divide
+
             default:
                 break
             }

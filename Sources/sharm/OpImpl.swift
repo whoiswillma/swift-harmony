@@ -147,6 +147,9 @@ enum OpImpl {
         case .keys:
             try NaryImpl.keys(context: &context)
 
+        case .divide:
+            try NaryImpl.divide(context: &context)
+
         default:
             throw OpError.unimplemented("Nary \(n)")
         }

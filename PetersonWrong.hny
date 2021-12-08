@@ -11,9 +11,9 @@ def thread(self):
         await (not flags[1 - self]) or (turn == self)
 
         # critical section is here
-        log (self, .enter)
+        print (self, .enter)
         @cs: assert atLabel(cs) == { (thread, self): choose({ 0, 1 }) }
-        log (self, .exit)
+        print (self, .exit)
 
         # Leave critical section
         flags[self] = False
