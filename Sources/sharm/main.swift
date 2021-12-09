@@ -86,11 +86,14 @@ extension Sharm {
         @OptionGroup
         var options: Options
 
+        @Flag
+        var silent: Bool = false
+
         func run() throws {
             options.setLoggerLevel()
 
             let code = try options.readCodeFromHvmPath()
-            let modelChecker = StatefulModelChecker(code: code)
+            let modelChecker = StatefulModelChecker(code: code, silent: silent)
             try modelChecker.run()
         }
 
@@ -146,6 +149,9 @@ extension Sharm {
         @Flag
         var genSanityChecks = false
 
+        @Flag
+        var silent = false
+
         func run() throws {
             options.setLoggerLevel()
 
@@ -155,7 +161,8 @@ extension Sharm {
                 sharmSourcesDir: sharmSourcesDir,
                 outputDir: outputDir,
                 dryRun: dryRun,
-                genSanityChecks: genSanityChecks
+                genSanityChecks: genSanityChecks,
+                silent: silent
             )
             try compiler.run()
         }

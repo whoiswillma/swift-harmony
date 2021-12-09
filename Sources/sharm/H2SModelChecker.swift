@@ -14,19 +14,22 @@ class H2SModelChecker {
     private let writer: H2SUtil.FileWriter
     private let genSanityChecks: Bool
     private let outputDir: String
+    private let silent: Bool
 
     init(
         code: [Op],
         sharmSourcesDir: String,
         outputDir: String,
         dryRun: Bool,
-        genSanityChecks: Bool
+        genSanityChecks: Bool,
+        silent: Bool
     ) {
         self.code = code
         self.sharmSourcesDir = sharmSourcesDir
         self.writer = H2SUtil.FileWriter(outputDir: outputDir, dryRun: dryRun)
         self.genSanityChecks = genSanityChecks
         self.outputDir = outputDir
+        self.silent = silent
     }
 
     func run() throws {
@@ -158,7 +161,7 @@ class H2SModelChecker {
                 continue
             }
 
-            if visited.count % 1000 == 0 {
+            if \#(!silent), visited.count % 1000 == 0 {
                 print(visited.count, boundary.count)
             }
 

@@ -85,9 +85,11 @@ class StatefulModelChecker {
     }
 
     let code: [Op]
+    let silent: Bool
 
-    init(code: [Op]) {
+    init(code: [Op], silent: Bool) {
         self.code = code
+        self.silent = silent
     }
 
     func run() throws {
@@ -99,7 +101,7 @@ class StatefulModelChecker {
                 continue
             }
 
-            if visited.count % 1000 == 0 {
+            if !silent, visited.count % 1000 == 0 {
                 print(visited.count, boundary.count)
             }
 
